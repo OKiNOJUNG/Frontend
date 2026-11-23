@@ -474,6 +474,70 @@
       box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.12);
     }
 
+    .field-input.field-auto-readonly {
+      background: #E4EFE8 !important;
+      border: 1.5px solid #1F8A65 !important;
+      color: #10261B !important;
+      font-weight: 700;
+      cursor: default;
+    }
+
+    .field-input.field-auto-readonly:focus {
+      border-color: #1F8A65 !important;
+      box-shadow: 0 0 0 3px rgba(31, 138, 101, 0.14);
+    }
+
+    .field-input.field-auto-editable {
+      background: #EFF8FF !important;
+      border: 1.5px dashed #0284C7 !important;
+      color: #0C4A6E !important;
+    }
+
+    .field-input.field-auto-editable:focus {
+      border-style: solid !important;
+      border-color: #0284C7 !important;
+      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.16);
+    }
+
+    .th-auto-calc {
+      background: #DCF5EB !important;
+      color: #134E39 !important;
+    }
+
+    .td-auto-calc {
+      background: #F0FAF5 !important;
+    }
+
+    .badge-auto-ro {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      white-space: nowrap;
+      background: #DCF5EB;
+      color: #134E39;
+      border: 1px solid #1F8A65;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 1px 6px;
+      border-radius: 9999px;
+      line-height: 1.3;
+    }
+
+    .badge-auto-edit {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      white-space: nowrap;
+      background: #E0F2FE;
+      color: #0369A1;
+      border: 1px solid #38BDF8;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 1px 6px;
+      border-radius: 9999px;
+      line-height: 1.3;
+    }
+
     .inline-error-msg {
       display: flex;
       align-items: center;
@@ -542,8 +606,8 @@
       max-width: calc(100% - 20px);
     }
 
-    body.mobile-preview-mode #mobile-date-select {
-      display: inline-block !important;
+    body.mobile-preview-mode #mobile-date-stepper {
+      display: flex !important;
     }
 
     body.mobile-preview-mode #main-content-area {
@@ -830,6 +894,17 @@
       box-shadow: 0 6px 18px -10px rgba(16, 38, 27, 0.14);
     }
 
+    .ledger-paper {
+      background: rgba(255, 253, 247, 0.96);
+      border: 1px solid rgba(27, 59, 43, 0.18);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .formula-callout {
+      border: 1px solid rgba(225, 29, 72, 0.28);
+      background: #FFF5F7;
+    }
+
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -926,7 +1001,8 @@
 
       .liquid-glass,
       .tank-card,
-      .stock-chart-card {
+      .stock-chart-card,
+      .ledger-paper {
         box-shadow: none !important;
         border: 1px solid #94A3B8 !important;
         backdrop-filter: none !important;
@@ -1274,7 +1350,7 @@
           </div>
 
           <div class="flex items-center flex-wrap gap-1.5 sm:gap-2 w-full lg:w-auto justify-between sm:justify-end">
-            <div class="lg:hidden flex items-center gap-1">
+            <div id="mobile-date-stepper" class="lg:hidden flex items-center gap-1">
               <button type="button" onclick="stepWorkingDate(-1)"
                 class="p-1.5 rounded-xl bg-[#FFFDF7] hover:bg-[#E4EFE8] text-[#1B3B2B] border border-[#1B3B2B]/20"
                 title="วันก่อนหน้า">
@@ -1741,7 +1817,8 @@
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function structuredCloneSafe(obj) {
@@ -1771,6 +1848,71 @@
       const tid = dist.targetTankId || '640/6';
       dist.targetTanks = [{ tankId: tid, amount: dTotal }];
       return dist.targetTanks;
+    }
+
+    function normalizeDayRecord(dKey, d) {
+      if (!d || typeof d !== 'object') return d;
+      const parts = String(d.date || dKey || '2569-11-17').split('-');
+      const dayNum = parseInt(parts[2], 10) || 1;
+      d.date = d.date || dKey;
+      d.dayNumber = Number.isFinite(Number(d.dayNumber)) ? Number(d.dayNumber) : dayNum;
+      d.displayDate = d.displayDate || formatThaiBeDate(d.date, false);
+      d.docNo = d.docNo || formatDocNoFromDate(d.date);
+
+      const bot = d.bottling || {};
+      d.bottling = {
+        prep1: { receive: 0, discharge: 0, floorLoss: 0, sapOrder: '', ...(bot.prep1 || {}) },
+        prep2: { receive: 0, discharge: 0, floorLoss: 0, sapOrder: '', ...(bot.prep2 || {}) }
+      };
+      d.dispatchesToBottling = Array.isArray(d.dispatchesToBottling) ? d.dispatchesToBottling : [];
+      d.transfers70 = Array.isArray(d.transfers70) ? d.transfers70 : [];
+
+      const bl = d.blending || {};
+      d.blending = {
+        batchCount: 0,
+        startBatchNo: 1,
+        lastTankGaugeTe: 1000,
+        calcMode: 'formula',
+        volInputUnit: 'L',
+        manualAvg70: 17040,
+        customVol40: null,
+        customVol70: null,
+        totalMatDoc: '',
+        tankMatDocs: {},
+        sourceTanks70: [],
+        receivingTanks40: [],
+        blendingVessels: [],
+        sapOrders: [],
+        matDocOrders: [],
+        blendingIds: [],
+        ...bl
+      };
+      if (!Array.isArray(d.blending.sourceTanks70)) d.blending.sourceTanks70 = [];
+      if (!Array.isArray(d.blending.receivingTanks40)) d.blending.receivingTanks40 = [];
+      if (!Array.isArray(d.blending.blendingVessels)) d.blending.blendingVessels = [];
+      if (!Array.isArray(d.blending.sapOrders)) d.blending.sapOrders = [];
+      if (!Array.isArray(d.blending.matDocOrders)) d.blending.matDocOrders = [];
+      if (!Array.isArray(d.blending.blendingIds)) d.blending.blendingIds = [];
+      if (!d.blending.tankMatDocs || typeof d.blending.tankMatDocs !== 'object') d.blending.tankMatDocs = {};
+
+      if (d.blending.calcMode === 'manual' &&
+          (d.blending.customVol40 === null || d.blending.customVol40 === undefined || d.blending.customVol40 === '') &&
+          (d.blending.customVol70 === null || d.blending.customVol70 === undefined || d.blending.customVol70 === '') &&
+          Number(d.blending.manualAvg70) > 0) {
+        d.blending.customVol70 = Number(d.blending.manualAvg70);
+      }
+      if (d.blending.startBatchNoManual === undefined && parseInt(d.blending.startBatchNo, 10) > 0) {
+        d.blending.startBatchNoManual = true;
+      }
+
+      if (!d.distillation || typeof d.distillation !== 'object') {
+        d.distillation = { d1: 0, d2: 0, d3: 0, d4: 0, targetTankId: '640/6', targetTanks: [{ tankId: '640/6', amount: 0 }] };
+      }
+      normalizeDistillationTargets(d.distillation);
+      if (!d.distillation.molassesSupplier) {
+        d.distillation.molassesSupplier = (appState.molassesSuppliers && appState.molassesSuppliers[0]?.name) || 'บมจ. น้ำตาลมิตรผล';
+      }
+      return d;
     }
 
     function showToast(title, message = '', type = 'info') {
@@ -1885,20 +2027,21 @@
             : structuredCloneSafe(DEFAULT_MOLASSES_SUPPLIERS);
           appState.pctLiquorConfig = { ...DEFAULT_PCT_LIQUOR_CONFIG, ...(parsed.pctLiquorConfig || {}) };
           appState.days = parsed.days && Object.keys(parsed.days).length ? parsed.days : defaultState.days;
-          Object.values(appState.days).forEach((d) => {
-            if (d && d.distillation) {
-              normalizeDistillationTargets(d.distillation);
-              if (!d.distillation.molassesSupplier) {
-                d.distillation.molassesSupplier = appState.molassesSuppliers[0]?.name || 'บมจ. น้ำตาลมิตรผล';
-              }
-            }
+          Object.entries(appState.days).forEach(([k, d]) => {
+            normalizeDayRecord(k, d);
           });
+          if (!appState.days[appState.activeDate]) {
+            appState.activeDate = getSortedDates().pop() || '2569-11-17';
+          }
+          if (appState.traceFilter) appState.traceFilter.date = appState.activeDate;
           applyTankConfigsToMaster();
           return;
         }
       } catch (e) {
         console.warn('State restore fallback:', e);
       }
+      appState.activeDate = defaultState.activeDate;
+      if (appState.traceFilter) appState.traceFilter.date = appState.activeDate;
       appState.openingBalances = defaultState.openingBalances;
       appState.holdTanks = defaultState.holdTanks;
       appState.tankConfigs = defaultState.tankConfigs;
@@ -1962,7 +2105,7 @@
       const bl = dayData.blending || {};
       const parsedCount = parseInt(bl.batchCount, 10);
       const N = Number.isFinite(parsedCount) ? Math.max(0, parsedCount) : 0;
-      const recvIds = Array.isArray(bl.receivingTanks40) ? bl.receivingTanks40 : [];
+      const recvIds = [...new Set((Array.isArray(bl.receivingTanks40) ? bl.receivingTanks40 : []).filter(Boolean))];
       const srcSpecs = Array.isArray(bl.sourceTanks70) ? bl.sourceTanks70 : [];
 
       if (N === 0) {
@@ -2006,8 +2149,8 @@
       let lastBaseTe = 1000;
       if (recvDetails.length > 0) {
         lastBaseTe = recvDetails.length === 1
-          ? (baseLast > 0 ? baseLast / 20 : 1000)
-          : ((baseLast > 0 && baseLast < lastTank.workingVol) ? (baseLast / 20) : 1000);
+          ? (baseLast >= 0 ? baseLast / 20 : 1000)
+          : ((baseLast >= 0 && baseLast < lastTank.workingVol) ? (baseLast / 20) : 1000);
       }
       const rawGaugeTe = Number(bl.lastTankGaugeTe);
       const isGaugeManual = bl.lastTankGaugeTeManual === true ||
@@ -2041,7 +2184,8 @@
 
       const hasCustom40 = bl.customVol40 !== null && bl.customVol40 !== undefined && bl.customVol40 !== '' && Number.isFinite(Number(bl.customVol40));
       const hasCustom70 = bl.customVol70 !== null && bl.customVol70 !== undefined && bl.customVol70 !== '' && Number.isFinite(Number(bl.customVol70));
-      const isManualOverride = hasCustom40 || hasCustom70;
+      const hasLegacyManual70 = !hasCustom40 && !hasCustom70 && bl.calcMode === 'manual' && Number(bl.manualAvg70) > 0;
+      const isManualOverride = hasCustom40 || hasCustom70 || hasLegacyManual70;
 
       let activeVol40 = autoVol40;
       let activeVol70 = autoVol70;
@@ -2054,6 +2198,9 @@
       } else if (hasCustom40 && hasCustom70) {
         activeVol40 = Math.max(0, Number(bl.customVol40));
         activeVol70 = Math.max(0, Number(bl.customVol70));
+      } else if (hasLegacyManual70) {
+        activeVol70 = Math.max(0, Number(bl.manualAvg70));
+        activeVol40 = Number((activeVol70 * 70 / 40).toFixed(4));
       }
 
       const base70Step = activeVol70;
@@ -2108,6 +2255,7 @@
       recvDetails.forEach((rd) => {
         tankFlow[rd.tankId] = {
           tankId: rd.tankId,
+          workingVol: rd.workingVol,
           opening: rd.opening,
           outBottling: rd.outBottling,
           baseAfterOut: rd.baseAfterOut,
@@ -2128,27 +2276,35 @@
         const remainSpaceArr = recvDetails.map((r) => (r.isLast ? Infinity : r.needToFull));
 
         batches.forEach((b) => {
+          while (curIdx < recvDetails.length - 1 && remainSpaceArr[curIdx] <= 0.0001) {
+            curIdx++;
+          }
           const curTank = recvDetails[curIdx];
           const curTid = curTank.tankId;
           tankFlow[curTid].receiveBlend += b.vol40;
           tankFlow[curTid].directBatchCount += 1;
-          tankFlow[curTid].batchNumbers.push(b.batchNo);
+          if (!tankFlow[curTid].batchNumbers.includes(b.batchNo)) {
+            tankFlow[curTid].batchNumbers.push(b.batchNo);
+          }
 
-          if (curTank.isLast || b.vol40 <= remainSpaceArr[curIdx]) {
+          if (curTank.isLast || b.vol40 <= remainSpaceArr[curIdx] + 0.0001) {
             const before = remainSpaceArr[curIdx];
             if (!curTank.isLast) {
-              remainSpaceArr[curIdx] -= b.vol40;
+              remainSpaceArr[curIdx] = Math.max(0, Number((remainSpaceArr[curIdx] - b.vol40).toFixed(4)));
               tankFlow[curTid].deductionSteps.push({
                 label: `ถังปรุง ${b.batchNo}`,
                 before,
                 subtract: b.vol40,
                 after: remainSpaceArr[curIdx]
               });
+              if (remainSpaceArr[curIdx] <= 0.0001 && curIdx < recvDetails.length - 1) {
+                curIdx++;
+              }
             }
             b.allocations.push({ tankId: curTid, amount: b.vol40, isOverflow: false });
           } else {
-            const fitsInCur = remainSpaceArr[curIdx];
-            const overflow = b.vol40 - fitsInCur;
+            const fitsInCur = Math.max(0, remainSpaceArr[curIdx]);
+            let overflow = Number((b.vol40 - fitsInCur).toFixed(4));
             tankFlow[curTid].deductionSteps.push({
               label: `ถังปรุง ${b.batchNo} (เต็ม + โอนส่วนเกิน)`,
               before: fitsInCur,
@@ -2157,24 +2313,45 @@
               overflow
             });
             remainSpaceArr[curIdx] = 0;
-            b.allocations.push({ tankId: curTid, amount: fitsInCur, isOverflow: false });
+            if (fitsInCur > 0.0001) {
+              b.allocations.push({ tankId: curTid, amount: fitsInCur, isOverflow: false });
+            }
 
-            if (curIdx + 1 < recvDetails.length) {
-              const nextTid = recvDetails[curIdx + 1].tankId;
-              tankFlow[curTid].dischargeTransfer += overflow;
-              tankFlow[nextTid].receiveTransfer += overflow;
-              tankFlow[nextTid].batchNumbers.push(b.batchNo);
-              if (!recvDetails[curIdx + 1].isLast) {
-                const nextBefore = remainSpaceArr[curIdx + 1];
-                remainSpaceArr[curIdx + 1] -= overflow;
+            let fromIdx = curIdx;
+            while (overflow > 0.0001 && fromIdx + 1 < recvDetails.length) {
+              const fromTid = recvDetails[fromIdx].tankId;
+              const nextIdx = fromIdx + 1;
+              const nextTank = recvDetails[nextIdx];
+              const nextTid = nextTank.tankId;
+              const putInNext = nextTank.isLast
+                ? overflow
+                : Number(Math.min(overflow, Math.max(0, remainSpaceArr[nextIdx])).toFixed(4));
+              const spillFurther = Number(Math.max(0, overflow - putInNext).toFixed(4));
+
+              tankFlow[fromTid].dischargeTransfer = Number((tankFlow[fromTid].dischargeTransfer + overflow).toFixed(4));
+              tankFlow[nextTid].receiveTransfer = Number((tankFlow[nextTid].receiveTransfer + overflow).toFixed(4));
+              if (!tankFlow[nextTid].batchNumbers.includes(b.batchNo)) {
+                tankFlow[nextTid].batchNumbers.push(b.batchNo);
+              }
+              if (!nextTank.isLast) {
+                const nextBefore = remainSpaceArr[nextIdx];
+                remainSpaceArr[nextIdx] = Math.max(0, Number((nextBefore - putInNext).toFixed(4)));
                 tankFlow[nextTid].deductionSteps.push({
-                  label: `รับโอนล้นจาก ${curTid.split('/')[0]}`,
+                  label: spillFurther > 0.0001 ? `รับโอนล้นจาก ${fromTid.split('/')[0]} (เต็ม + โอนต่อ)` : `รับโอนล้นจาก ${fromTid.split('/')[0]}`,
                   before: nextBefore,
                   subtract: overflow,
-                  after: remainSpaceArr[curIdx + 1]
+                  after: remainSpaceArr[nextIdx],
+                  ...(spillFurther > 0.0001 ? { overflow: spillFurther } : {})
                 });
               }
-              b.allocations.push({ tankId: nextTid, amount: overflow, isOverflow: true });
+              if (putInNext > 0.0001) {
+                b.allocations.push({ tankId: nextTid, amount: putInNext, isOverflow: true });
+              }
+              overflow = spillFurther;
+              fromIdx = nextIdx;
+            }
+            curIdx = fromIdx;
+            if (curIdx < recvDetails.length - 1 && !recvDetails[curIdx].isLast && remainSpaceArr[curIdx] <= 0.0001) {
               curIdx++;
             }
           }
@@ -2235,7 +2412,7 @@
       for (let dIdx = 0; dIdx <= targetIdx; dIdx++) {
         const dKey = sortedDates[dIdx];
         const day = appState.days[dKey];
-        if (day.blending && dIdx > 0 && !day.blending.startBatchNoManual) {
+        if (day.blending && dIdx > 0 && (day.blending.startBatchNoManual === false || !(parseInt(day.blending.startBatchNo, 10) > 0))) {
           day.blending.startBatchNo = prevNextBatch;
         }
         const learnedAvg40 = priorAvg40Samples.length > 0
@@ -2373,8 +2550,8 @@
 
         const b113List = list.filter((r) => r.building === 'b113');
         const b111List = list.filter((r) => r.building === 'b111');
-        const b70List = list.filter((r) => r.degree === 70);
-        const b40AllList = list.filter((r) => r.degree === 40);
+        const b70List = list.filter((r) => r.building === 'aging' || r.building === 'b110');
+        const b40AllList = list.filter((r) => r.building === 'b111' || r.building === 'b113');
 
         const summary113 = {
           opening: sumField(b113List, 'opening'),
@@ -2396,24 +2573,23 @@
           ending: sumField(b111List, 'ending')
         };
 
-        const transfersSum = (day.transfers70 || []).reduce((s, tr) => s + (Number(tr.amount) || 0), 0);
         const summary70 = {
           opening: sumField(b70List, 'opening'),
-          colE: distTotal,
-          colF: distAllocatedTotal + transfersSum,
+          colE: sumField(b70List, 'colE') + distTotal,
+          colF: sumField(b70List, 'colF'),
           colG: sumField(b70List, 'colG'),
-          colH: 0,
-          colI: distTotal + transfersSum,
+          colH: sumField(b70List, 'colH'),
+          colI: sumField(b70List, 'colI') + distTotal,
           ending: sumField(b70List, 'ending')
         };
 
         const summary40 = {
           opening: sumField(b40AllList, 'opening'),
-          colE: sumField(b111List, 'colE'),
-          colF: sumField(b111List, 'colF') + summary113.colF,
-          colG: summary113.colG,
-          colH: sumField(b111List, 'colH') + summary113.colH,
-          colI: sumField(b111List, 'colI'),
+          colE: sumField(b40AllList, 'colE'),
+          colF: sumField(b40AllList, 'colF'),
+          colG: sumField(b40AllList, 'colG'),
+          colH: sumField(b40AllList, 'colH'),
+          colI: sumField(b40AllList, 'colI'),
           ending: sumField(b40AllList, 'ending')
         };
 
@@ -2607,6 +2783,8 @@
         appState.currentUser = found;
         if (document.getElementById('remember-me').checked) {
           localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(found));
+        } else {
+          localStorage.removeItem(STORAGE_KEYS.SESSION);
         }
         enterApp();
         showToast('เข้าสู่ระบบสำเร็จ', `ยินดีต้อนรับ ${found.displayName}`, 'success');
@@ -2616,10 +2794,12 @@
         const savedSession = localStorage.getItem(STORAGE_KEYS.SESSION);
         if (savedSession) {
           const parsed = JSON.parse(savedSession);
-          const valid = getUsers().find((u) => u.username === parsed.username && u.active !== false);
+          const valid = getUsers().find((u) => u.username === parsed.username && u.password === parsed.password && u.active !== false);
           if (valid) {
             appState.currentUser = valid;
             enterApp();
+          } else {
+            localStorage.removeItem(STORAGE_KEYS.SESSION);
           }
         }
       } catch (e) { }
@@ -2707,7 +2887,7 @@
             <button type="button" onclick="editUserPrompt(${idx})" class="btn-pill bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 px-2.5 py-1.5 text-xs">
               <i data-lucide="pencil" class="w-3.5 h-3.5"></i> แก้ไข
             </button>
-            ${u.username !== 'admin' ? `
+            ${u.username !== 'admin' && u.username.toLowerCase() !== (appState.currentUser?.username || '').toLowerCase() ? `
               <button type="button" onclick="deleteUserPrompt(${idx})" class="btn-pill bg-rose-50 hover:bg-rose-100 text-rose-700 px-2.5 py-1.5 text-xs">
                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> ลบ
               </button>
@@ -2720,6 +2900,7 @@
 
     document.getElementById('add-user-form').addEventListener('submit', (e) => {
       e.preventDefault();
+      if (appState.currentUser?.role !== 'admin') return;
       const username = document.getElementById('new-u-username').value.trim();
       const displayName = document.getElementById('new-u-name').value.trim();
       const password = document.getElementById('new-u-password').value.trim();
@@ -2739,8 +2920,10 @@
     });
 
     function editUserPrompt(idx) {
+      if (appState.currentUser?.role !== 'admin') return;
       const users = getUsers();
       const u = users[idx];
+      if (!u) return;
       Swal.fire({
         title: `แก้ไขบัญชี @${u.username}`,
         html: `
@@ -2766,15 +2949,33 @@
         confirmButtonText: 'บันทึกการแก้ไข',
         cancelButtonText: 'ยกเลิก',
         confirmButtonColor: '#FF3EA5',
-        preConfirm: () => ({
-          displayName: document.getElementById('sw-u-name').value.trim(),
-          password: document.getElementById('sw-u-pw').value.trim(),
-          role: document.getElementById('sw-u-role').value
-        })
+        preConfirm: () => {
+          const displayName = document.getElementById('sw-u-name').value.trim();
+          const password = document.getElementById('sw-u-pw').value.trim();
+          const role = u.username === 'admin' ? 'admin' : document.getElementById('sw-u-role').value;
+          if (!displayName || !password) {
+            Swal.showValidationMessage('กรุณากรอกชื่อ-นามสกุลและรหัสผ่านให้ครบถ้วน');
+            return false;
+          }
+          return { displayName, password, role };
+        }
       }).then((res) => {
-        if (res.isConfirmed && res.value.displayName && res.value.password) {
-          users[idx] = { ...u, ...res.value };
+        if (res.isConfirmed && res.value) {
+          const updated = { ...u, ...res.value };
+          users[idx] = updated;
           saveUsers(users);
+          if (appState.currentUser && updated.username.toLowerCase() === appState.currentUser.username.toLowerCase()) {
+            appState.currentUser = updated;
+            const gEl = document.getElementById('greeting-name');
+            if (gEl) gEl.textContent = updated.displayName;
+            const snEl = document.getElementById('sidebar-user-name');
+            if (snEl) snEl.textContent = updated.displayName;
+            const srEl = document.getElementById('sidebar-user-role');
+            if (srEl) srEl.textContent = updated.role === 'admin' ? 'ผู้ดูแลระบบ (Admin)' : 'เจ้าหน้าที่ธุรการปรุงสุรา(Staff)';
+            if (localStorage.getItem(STORAGE_KEYS.SESSION)) {
+              localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(updated));
+            }
+          }
           renderUsersTable();
           showToast('อัปเดตบัญชีเรียบร้อย', `@${u.username}`, 'success');
         }
@@ -2782,8 +2983,14 @@
     }
 
     function deleteUserPrompt(idx) {
+      if (appState.currentUser?.role !== 'admin') return;
       const users = getUsers();
       const u = users[idx];
+      if (!u) return;
+      if (appState.currentUser && u.username.toLowerCase() === appState.currentUser.username.toLowerCase()) {
+        showToast('ไม่สามารถลบได้', 'ไม่สามารถลบบัญชีที่กำลังเข้าสู่ระบบอยู่ได้', 'warning');
+        return;
+      }
       Swal.fire({
         title: `ลบบัญชี @${u.username}?`,
         text: 'ผู้ใช้นี้จะไม่สามารถเข้าสู่ระบบได้อีก',
@@ -3151,16 +3358,6 @@
     }
 
     function populateDateSelectors() {
-      const dates = getSortedDates();
-      const opts = dates.map((dKey) => {
-        const d = appState.days[dKey];
-        return `<option value="${dKey}" ${dKey === appState.activeDate ? 'selected' : ''}>${escHtml(d.displayDate || dKey)}</option>`;
-      }).join('');
-      const sel1 = document.getElementById('active-date-select');
-      const sel2 = document.getElementById('mobile-date-select');
-      if (sel1) sel1.innerHTML = opts;
-      if (sel2) sel2.innerHTML = opts;
-
       const activeDay = appState.days[appState.activeDate];
       if (activeDay) {
         const shortLabel = formatThaiBeDate(appState.activeDate, true);
@@ -3238,7 +3435,7 @@
       if (!day) return;
       Swal.fire({
         title: `ล้างข้อมูลหน้าฟอร์มทั้งหมดของวันที่ ${day.displayDate}?`,
-        text: 'ล้างรายการกรอกส่วน 2.1 – 2.4 ของวันนี้ทั้งหมด (ไม่กระทบยอดตั้งต้นและวันอื่น)',
+        text: 'ล้างรายการกรอกข้อ 1 – 4 ของวันนี้ทั้งหมด (ไม่กระทบยอดตั้งต้นและวันอื่น)',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'ล้างข้อมูลทั้งหมด',
@@ -3697,14 +3894,13 @@
             appState.pctLiquorConfig = { ...DEFAULT_PCT_LIQUOR_CONFIG, ...(st.pctLiquorConfig || {}) };
             appState.days = st.days;
 
-            Object.values(appState.days).forEach((d) => {
-              if (d && d.distillation) {
-                normalizeDistillationTargets(d.distillation);
-                if (!d.distillation.molassesSupplier) {
-                  d.distillation.molassesSupplier = appState.molassesSuppliers[0]?.name || 'บมจ. น้ำตาลมิตรผล';
-                }
-              }
+            Object.entries(appState.days).forEach(([k, d]) => {
+              normalizeDayRecord(k, d);
             });
+            if (!appState.days[appState.activeDate]) {
+              appState.activeDate = getSortedDates().pop() || '2569-11-17';
+            }
+            if (appState.traceFilter) appState.traceFilter.date = appState.activeDate;
 
             // Restore users safely while guaranteeing current signed-in user remains active
             const importedUsers = parsed?.data?.users;
@@ -3841,8 +4037,9 @@
 
       const matchingTanks = MASTER_TANKS.filter((t) => t.spiritType === selectedType);
       const tankCount = matchingTanks.length;
+      const heelTankCount = matchingTanks.filter((t) => t.building !== 'b113').length;
       const upperVol = matchingTanks.reduce((s, t) => s + (Number(t.workingVol) || 0), 0);
-      const lowerVol = tankCount * 20000;
+      const lowerVol = heelTankCount * 20000;
 
       const allDays = getAllTimelineDaysForTrend();
       const monthKeys = [...new Set(allDays.map((d) => d.dateKey.slice(0, 7)))].sort();
@@ -3936,6 +4133,7 @@
         deg,
         colorSpec,
         tankCount,
+        heelTankCount,
         upperVol,
         lowerVol,
         monthKeys,
@@ -4102,7 +4300,7 @@
               </span>
               <span class="inline-flex items-center gap-1.5">
                 <span class="w-4 border-t-2 border-dashed border-[#E0248B] inline-block"></span>
-                <span>Lower (20,000 × ${td.tankCount} ถัง): <b>${fmtNum(td.lowerVol)} L (${lowerPct.toFixed(1)}%)</b></span>
+                <span>Lower (20,000 × ${td.heelTankCount} ถัง): <b>${fmtNum(td.lowerVol)} L (${lowerPct.toFixed(1)}%)</b></span>
               </span>
             </div>
             <span class="text-[11px] text-[#436152]">แสดงข้อมูล ${pts.length} วัน</span>
@@ -4142,7 +4340,7 @@
                   <line x1="${padL}" y1="${lowerY.toFixed(1)}" x2="${W - padR}" y2="${lowerY.toFixed(1)}" stroke="#E0248B" stroke-width="2" stroke-dasharray="5 4" />
                   <g transform="translate(${padL + 6}, ${Math.min(padT + plotH - 22, lowerY - 22)})">
                     <rect width="236" height="19" rx="9" fill="#FFE3F2" stroke="#E0248B" stroke-width="1" />
-                    <text x="118" y="13" text-anchor="middle" font-size="10.5" font-weight="700" fill="#9D115D">Lower (20K×${td.tankCount}): ${formatShortChartVal(td.lowerVol)} (${lowerPct.toFixed(1)}%)</text>
+                    <text x="118" y="13" text-anchor="middle" font-size="10.5" font-weight="700" fill="#9D115D">Lower (20K×${td.heelTankCount}): ${formatShortChartVal(td.lowerVol)} (${lowerPct.toFixed(1)}%)</text>
                   </g>
 
                   <!-- Subtle Receive (+) / Discharge (-) Daily Flow Bars at Bottom -->
@@ -4278,9 +4476,13 @@
     }
 
     function renderBuildingStockChart(b) {
+      const effYMax = Math.max(
+        b.yMax,
+        ...b.list.map((t) => Math.ceil(Math.max(t.workingVol, t.ending) / b.yStep) * b.yStep)
+      );
       // Build Y-axis ticks (e.g. 0K, 50K, 100K, 150K, 200K)
       const ticks = [];
-      for (let v = b.yMax; v >= 0; v -= b.yStep) {
+      for (let v = effYMax; v >= 0; v -= b.yStep) {
         ticks.push(v);
       }
       const bSpec = getSpiritColorSpec(b.spiritType, b.degree);
@@ -4318,7 +4520,7 @@
                   <!-- Y-Axis Labels Column -->
                   <div class="w-12 shrink-0 relative h-[270px] select-none">
                     ${ticks.map((tv) => {
-        const bottomPct = (tv / b.yMax) * 100;
+        const bottomPct = (tv / effYMax) * 100;
         return `
                         <div class="absolute right-2 text-[11px] font-semibold text-[#436152] -translate-y-1/2" style="bottom: ${bottomPct.toFixed(1)}%;">
                           ${Math.round(tv / 1000)}K
@@ -4330,13 +4532,13 @@
                   <!-- Plot Area with Horizontal Gridlines & Stacked Bars -->
                   <div class="flex-1 stock-chart-plot">
                     ${ticks.filter((t) => t > 0).map((tv) => {
-        const bottomPct = (tv / b.yMax) * 100;
+        const bottomPct = (tv / effYMax) * 100;
         return `<div class="stock-y-gridline" style="bottom: ${bottomPct.toFixed(1)}%;"></div>`;
       }).join('')}
 
                     ${b.list.map((t) => {
         const cap = Math.max(t.workingVol, t.ending);
-        const stackHeightPct = Math.min(100, (cap / b.yMax) * 100);
+        const stackHeightPct = Math.min(100, (cap / effYMax) * 100);
         const actPctOfStack = cap > 0 ? Math.min(100, (Math.max(0, t.ending) / cap) * 100) : 0;
         const remPctOfStack = Math.max(0, 100 - actPctOfStack);
         const remVol = Math.max(0, t.workingVol - t.ending);
@@ -4785,13 +4987,13 @@
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div class="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <span>3.6 ตารางกรอกเลข SAP Order &amp; เลข MatDoc ของถังปรุงแต่ละถัง (ถังผสม H01 และ H02)</span>
+                  <span>3.7 ตารางกรอกเลข SAP Order &amp; เลข MatDoc ของถังปรุงแต่ละถัง (ถังผสม H01 และ H02)</span>
                   <span class="badge-single-line px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-300">
                     ${bp.N % 2 === 0 ? `เลขคู่ (${bp.N} ถัง = ${bp.N / 2} คู่ MatDoc)` : `เลขคี่ (${bp.N} ถัง = ${Math.floor(bp.N / 2)} คู่ + ถังเศษสุดท้ายมีเลข SAP/MatDoc)`}
                   </span>
                 </div>
                 <p class="text-xs text-slate-500 mt-0.5">
-                  ปกติถังปรุงสลับ <b>H01</b> กับ <b>H02</b> เมื่อปรุงครบ 2 ถัง (~59,640 L + ก้นถังค้าง 20,000 L) จะโอนเข้าถังเก็บบ่มได้ 1 ถังและออกเลข <b>MatDoc 1 เลข</b> · หากวันไหนปรุงจำนวนถังเป็นเลขคี่ ถังสุดท้ายจะมีเลข <b>SAP / MatDoc</b> ด้วย
+                  คอลัมน์สีเขียวระบบคำนวณให้อัตโนมัติ · ปกติถังปรุงสลับ <b>H01</b> กับ <b>H02</b> เมื่อปรุงครบ 2 ถัง (~59,640 L + ก้นถังค้าง 20,000 L) จะโอนเข้าถังเก็บบ่มได้ 1 ถังและออกเลข <b>MatDoc 1 เลข</b>
                 </p>
               </div>
               <button type="button" onclick="autoFillBlendingSapMatDoc()" class="btn-pill bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 px-3 py-1.5 text-xs">
@@ -4800,18 +5002,18 @@
             </div>
 
             ${bp.N === 0 ? `
-              <div class="p-4 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">ยังไม่มีถังปรุงในวันนี้ (ระบุจำนวนถังที่ปรุงได้มากกว่า 0 เพื่อกรอกเลข SAP / MatDoc)</div>
+              <div class="p-4 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">ยังไม่มีถังปรุงในวันนี้ (ระบุจำนวนถังที่ปรุงในข้อ 3.1 มากกว่า 0 เพื่อกรอกเลข SAP / MatDoc)</div>
             ` : `
               <div class="overflow-x-auto rounded-xl border border-slate-200">
                 <table class="w-full text-xs border-collapse">
                   <thead>
                     <tr class="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
-                      <th class="py-2 px-2.5 text-center whitespace-nowrap">ถังปรุงที่</th>
+                      <th class="py-2 px-2.5 text-center whitespace-nowrap th-auto-calc">ถังปรุงที่ <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
                       <th class="py-2 px-2.5 text-center whitespace-nowrap">ถังปรุง (H01/H02)</th>
-                      <th class="py-2 px-2.5 text-center whitespace-nowrap">จากถัง 70°</th>
-                      <th class="py-2 px-2.5 text-center whitespace-nowrap">ใช้ 70° (L)</th>
-                      <th class="py-2 px-2.5 text-center whitespace-nowrap">ได้ 40° (L)</th>
-                      <th class="py-2 px-2.5 text-center whitespace-nowrap">ลงถังเก็บบ่ม 40° (อ.111)</th>
+                      <th class="py-2 px-2.5 text-center whitespace-nowrap th-auto-calc">จากถัง 70° <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
+                      <th class="py-2 px-2.5 text-center whitespace-nowrap th-auto-calc">ใช้ 70° (L) <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
+                      <th class="py-2 px-2.5 text-center whitespace-nowrap th-auto-calc">ได้ 40° (L) <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
+                      <th class="py-2 px-2.5 text-center whitespace-nowrap th-auto-calc">ลงถังเก็บบ่ม 40° (อ.111) <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
                       <th class="py-2 px-2.5 text-center whitespace-nowrap">เลขคำสั่ง SAP ปรุง (SAP Order)</th>
                       <th class="py-2 px-2.5 text-center whitespace-nowrap">เลข MatDoc โอนเข้าถังบ่ม (คู่ H01+H02 / ถังคี่สุดท้าย)</th>
                     </tr>
@@ -4819,9 +5021,9 @@
                   <tbody class="divide-y divide-slate-200">
                     ${bp.batches.map((b, idx) => `
                       <tr class="${b.isPairEnd ? 'bg-teal-50/40' : 'bg-white'} hover:bg-blue-50/30">
-                        <td class="py-2 px-2.5 text-center font-bold text-teal-900 whitespace-nowrap">
+                        <td class="py-2 px-2.5 text-center font-bold text-teal-900 whitespace-nowrap td-auto-calc">
                           #${b.batchNo}
-                          <span class="text-[10px] text-slate-500 ml-1">(${escHtml(b.blendingId)})</span>
+                          <span data-out="batch-${idx}-blendingId" class="text-[10px] text-slate-500 ml-1">(${escHtml(b.blendingId)})</span>
                         </td>
                         <td class="py-2 px-2.5 text-center whitespace-nowrap">
                           <select data-fk="batch-${idx}-vessel" class="field-input text-xs font-bold py-1 px-2 w-20 mx-auto text-center ${b.vessel === 'H01' ? '!bg-blue-50 !text-blue-900 !border-blue-200' : '!bg-purple-50 !text-purple-900 !border-purple-200'}"
@@ -4830,10 +5032,10 @@
                             <option value="H02" ${b.vessel === 'H02' ? 'selected' : ''}>H02</option>
                           </select>
                         </td>
-                        <td class="py-2 px-2.5 text-center font-bold text-amber-900 whitespace-nowrap">${escHtml(b.source70Tank)}</td>
-                        <td class="py-2 px-2.5 text-right tabular-nums font-semibold text-amber-800 whitespace-nowrap">${fmtNum(b.vol70)}</td>
-                        <td class="py-2 px-2.5 text-right tabular-nums font-bold text-teal-800 whitespace-nowrap">${fmtNum(b.vol40)}</td>
-                        <td class="py-2 px-2.5 whitespace-nowrap">
+                        <td class="py-2 px-2.5 text-center font-bold text-amber-900 whitespace-nowrap td-auto-calc">${escHtml(b.source70Tank)}</td>
+                        <td class="py-2 px-2.5 text-right tabular-nums font-semibold text-amber-800 whitespace-nowrap td-auto-calc">${fmtNum(b.vol70)}</td>
+                        <td class="py-2 px-2.5 text-right tabular-nums font-bold text-teal-800 whitespace-nowrap td-auto-calc">${fmtNum(b.vol40)}</td>
+                        <td class="py-2 px-2.5 whitespace-nowrap td-auto-calc">
                           ${b.allocations.map((a) => `
                             <span class="badge-single-line mr-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${a.isOverflow ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-teal-100 text-teal-900 border border-teal-200'}">
                               ${escHtml(a.tankId)}: ${fmtNum(a.amount)} L${a.isOverflow ? ' (ล้น)' : ''}
@@ -4873,7 +5075,7 @@
           <div class="rounded-2xl bg-white/95 border border-teal-200 p-4 space-y-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div class="text-sm font-bold text-slate-900">สรุปยอดปรุงลงถังบ่ม (ตามแบบฟอร์มหน้างาน) &amp; เลข SAP / MatDoc ยอดรวม</div>
+                <div class="text-sm font-bold text-slate-900">3.8 สรุปยอดปรุงลงถังบ่ม (ตามแบบฟอร์มหน้างาน) &amp; เลข SAP / MatDoc ยอดรวม</div>
                 <p class="text-xs text-slate-500">เลข SAP / MatDoc ที่กรอกในตารางนี้จะถูกส่งไปแสดงในกระดานคำนวณ &amp; Export (.xlsx) โดยอัตโนมัติ</p>
               </div>
               <button type="button" onclick="addReceive40Tank()" class="btn-pill bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 px-3 py-1.5 text-xs">
@@ -4884,8 +5086,8 @@
               <table class="w-full text-xs border-collapse">
                 <thead>
                   <tr class="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
-                    <th class="py-2 px-3 text-center whitespace-nowrap">ถังบ่ม (จำนวนถังปรุง)</th>
-                    <th class="py-2 px-3 text-center whitespace-nowrap">ยอดรวม (ลิตร)</th>
+                    <th class="py-2 px-3 text-center whitespace-nowrap th-auto-calc">ถังบ่ม (จำนวนถังปรุง) <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
+                    <th class="py-2 px-3 text-center whitespace-nowrap th-auto-calc">ยอดรวม (ลิตร) <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
                     <th class="py-2 px-3 text-center whitespace-nowrap">เลข SAP / MatDoc</th>
                   </tr>
                 </thead>
@@ -4894,10 +5096,10 @@
                     <tr><td colspan="3" class="py-3 px-3 text-center text-slate-400">ยังไม่มีถังบ่มที่รับปรุง</td></tr>
                   ` : (bp.agingTankSummaries || []).map((s) => `
                     <tr class="bg-white hover:bg-teal-50/30">
-                      <td class="py-2 px-3 text-center font-bold text-slate-900 whitespace-nowrap">
+                      <td class="py-2 px-3 text-center font-bold text-slate-900 whitespace-nowrap td-auto-calc">
                         ${escHtml(s.tankShort)}(${s.batchCount}) <span class="text-[10px] font-normal text-slate-500">(${escHtml(s.tankId)})</span>
                       </td>
-                      <td class="py-2 px-3 text-right tabular-nums font-bold text-teal-900 whitespace-nowrap">${fmtNum(s.total40)}</td>
+                      <td class="py-2 px-3 text-right tabular-nums font-bold text-teal-900 whitespace-nowrap td-auto-calc">${fmtNum(s.total40)}</td>
                       <td class="py-1.5 px-3 text-center whitespace-nowrap">
                         <input data-fk="tankMatDoc-${escHtml(s.tankId)}" type="text" class="field-input text-xs py-1 px-2 text-center w-40 mx-auto"
                           placeholder="SAP / MatDoc ถัง ${escHtml(s.tankShort)}"
@@ -4907,8 +5109,8 @@
                     </tr>
                   `).join('')}
                   <tr class="bg-teal-50 font-bold text-slate-950 border-t-2 border-teal-200">
-                    <td class="py-2 px-3 text-center whitespace-nowrap">40° รวมทุกถัง (${bp.N} ถัง)</td>
-                    <td class="py-2 px-3 text-right tabular-nums text-teal-950 whitespace-nowrap">${fmtNum(bp.total40)} L</td>
+                    <td class="py-2 px-3 text-center whitespace-nowrap td-auto-calc">40° รวมทุกถัง (${bp.N} ถัง)</td>
+                    <td class="py-2 px-3 text-right tabular-nums text-teal-950 whitespace-nowrap td-auto-calc">${fmtNum(bp.total40)} L</td>
                     <td class="py-1.5 px-3 text-center whitespace-nowrap">
                       <input data-fk="totalMatDoc" type="text" class="field-input text-xs font-bold py-1 px-2 text-center w-40 mx-auto !border-rose-300 text-rose-800"
                         placeholder="เลข SAP / MatDoc ยอดรวม"
@@ -4956,26 +5158,29 @@
       const stepCls = (n) => activeStep === n ? 'ring-2 ring-[#FF3EA5]/75 border-[#FF3EA5]/50 shadow-lg' : '';
 
       const flowSteps = [
-        { num: 1, code: '2.2', title: 'ส่งบรรจุ อ.111 → 113', hint: 'กรอกก่อนเพื่อหักคงเหลือถังบ่ม & ดึงเข้า 2.1 อัตโนมัติ', done: step1Done },
-        { num: 2, code: '2.1', title: 'ฝั่งบรรจุ อ.113', hint: 'ยอดรับดึงให้อัตโนมัติ กรอกยอดจ่ายบรรจุ/ตกพื้น', done: step2Done },
-        { num: 3, code: '2.3', title: 'ปรุง 70° → 40°', hint: 'จำนวนถัง → ถังรับ → ยอดเท/ค่าคำนวณ → ถัง 70° → MatDoc', done: step3Done },
-        { num: 4, code: '2.4', title: 'รับกลั่น & โอน 70°', hint: 'เติม 70° เข้า อ.110 (หลังหักจ่ายปรุง) & รับกลั่น D1–D4', done: step4Done }
+        { num: 1, title: 'ส่งบรรจุ อ.111 → 113', hint: 'กรอกก่อนเพื่อหักคงเหลือถังบ่ม & ดึงเข้าข้อ 2 อัตโนมัติ', done: step1Done },
+        { num: 2, title: 'ฝั่งบรรจุ อ.113', hint: 'ยอดรับดึงให้อัตโนมัติ กรอกยอดจ่ายบรรจุ/ตกพื้น', done: step2Done },
+        { num: 3, title: 'ปรุง 70° → 40°', hint: '3.1–3.2 จำนวน/Batch → 3.3 ถังรับ → 3.4–3.5 คำนวณ → 3.6 ถัง 70° → 3.7–3.8 MatDoc', done: step3Done },
+        { num: 4, title: 'รับกลั่น & โอน 70°', hint: '4.1 รับกลั่น D1–D4 & 4.2 โอน 70° เข้า อ.110 (หลังหักจ่ายปรุง)', done: step4Done }
       ];
+
+      const sumSrcBatches = (day.blending.sourceTanks70 || []).reduce((acc, s) => acc + (parseInt(s.batches, 10) || 0), 0);
+      const srcBatchDiff = sumSrcBatches - bp.N;
 
       el.innerHTML = `
         <!-- Form Header Banner -->
         <div class="liquid-glass rounded-3xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div class="flex items-center gap-2">
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">ส่วนที่ 2 · Daily Input Form</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">กรอกรับ-จ่ายรายวัน · Daily Input Form</span>
               <span class="text-xs font-semibold text-slate-500">เลขที่เอกสาร: ${escHtml(day.docNo)}</span>
             </div>
             <h2 class="text-lg sm:text-xl font-bold text-slate-900 mt-1">บันทึกข้อมูลรับ-จ่ายน้ำสุราประจำวันที่ ${escHtml(day.displayDate)}</h2>
-            <p class="text-xs text-slate-600">กรอกตามลำดับ 1 → 4 ด้านล่าง ทุกช่องคำนวณเชื่อมโยงและอัปเดตยอดคงเหลือทันทีแบบ Real-time</p>
+            <p class="text-xs text-slate-600">กรอกตามลำดับข้อ 1 → 4 ด้านล่าง ทุกช่องที่ไฮไลต์สีเขียว/ฟ้าจะคำนวณและอัปเดตยอดคงเหลือให้อัตโนมัติแบบ Real-time</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" onclick="syncBottlingReceiveFromDispatch()" class="btn-pill bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 px-3.5 py-2 text-xs">
-              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> ดึงยอดส่งบรรจุจาก 2.2 ลง 2.1 อัตโนมัติ
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> ดึงยอดส่งบรรจุจากข้อ 1 ลงข้อ 2 อัตโนมัติ
             </button>
             <button type="button" onclick="clearCurrentDayForm()" class="btn-pill bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-3.5 py-2 text-xs">
               <i data-lucide="eraser" class="w-3.5 h-3.5"></i> ล้างข้อมูลหน้าฟอร์มทั้งหมด
@@ -4991,14 +5196,14 @@
           </div>
         </div>
 
-        <!-- Guided Flow Path Bar (Step 1 -> Step 4) -->
-        <div class="liquid-glass rounded-2xl p-3 sm:p-3.5">
-          <div class="flex items-center justify-between gap-2 mb-2">
+        <!-- Guided Flow Path Bar (Step 1 -> Step 4) + Auto-Calculation Legend -->
+        <div class="liquid-glass rounded-2xl p-3 sm:p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between gap-2">
             <span class="text-xs font-extrabold text-[#1B3B2B] flex items-center gap-1.5">
               <i data-lucide="route" class="w-4 h-4 text-[#E0248B]"></i>
-              <span>ลำดับการกรอกตาม Flow Path (คลิกเพื่อข้ามไปยังขั้นตอนที่ต้องการ):</span>
+              <span>ลำดับการกรอกตาม Flow Path (คลิกเพื่อข้ามไปยังข้อที่ต้องการ):</span>
             </span>
-            <span class="text-[11px] font-bold text-[#E0248B]">กำลังเน้น: ขั้นที่ ${activeStep}</span>
+            <span class="text-[11px] font-bold text-[#E0248B]">กำลังเน้น: ข้อ ${activeStep}</span>
           </div>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
             ${flowSteps.map((st) => {
@@ -5006,30 +5211,47 @@
               return `
                 <button type="button" onclick="focusFormStep(${st.num})"
                   class="text-left p-2.5 rounded-xl border transition flex items-start gap-2 ${isAct ? 'bg-[#FFF0F8] border-[#FF3EA5] shadow-sm' : (st.done ? 'bg-[#E4EFE8]/70 border-[#1F8A65]/40 hover:bg-[#DCF5EB]' : 'bg-white/90 border-slate-200 hover:bg-slate-50')}">
-                  <span class="w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0 ${isAct ? 'bg-[#FF3EA5] text-white' : (st.done ? 'bg-[#1F8A65] text-white' : 'bg-slate-200 text-slate-700')}">
+                  <span data-step-badge="${st.num}" class="w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0 ${isAct ? 'bg-[#FF3EA5] text-white' : (st.done ? 'bg-[#1F8A65] text-white' : 'bg-slate-200 text-slate-700')}">
                     ${st.done && !isAct ? '✓' : st.num}
                   </span>
                   <div class="min-w-0">
-                    <div class="text-xs font-bold text-[#1B3B2B] truncate">ขั้นที่ ${st.num} (${st.code}): ${st.title}</div>
+                    <div class="text-xs font-bold text-[#1B3B2B] truncate">ข้อ ${st.num}: ${st.title}</div>
                     <div class="text-[10px] text-[#436152] leading-tight mt-0.5">${st.hint}</div>
                   </div>
                 </button>
               `;
             }).join('')}
           </div>
+          <!-- Legend explaining Manual vs Auto-Calculated fields -->
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2 border-t border-[#1B3B2B]/10 text-[11px] font-semibold text-[#1B3B2B]">
+            <span class="inline-flex items-center gap-1.5">
+              <span class="w-4 h-4 rounded border border-[#1B3B2B]/30 bg-[#FFFDF7] inline-block shrink-0"></span>
+              <span>ช่องกรอกเอง (Manual Input)</span>
+            </span>
+            <span class="inline-flex items-center gap-1.5">
+              <span class="w-4 h-4 rounded border-[1.5px] border-dashed border-[#0284C7] bg-[#EFF8FF] inline-block shrink-0"></span>
+              <span class="badge-auto-edit">อัตโนมัติ · แก้ได้</span>
+              <span>ระบบคำนวณ/ดึงค่าให้อัตโนมัติ (แก้ไขทับได้)</span>
+            </span>
+            <span class="inline-flex items-center gap-1.5">
+              <span class="w-4 h-4 rounded border-[1.5px] border-[#1F8A65] bg-[#E4EFE8] inline-block shrink-0"></span>
+              <span class="badge-auto-ro">คำนวณอัตโนมัติ</span>
+              <span>ระบบคำนวณให้อัตโนมัติ (ไม่ต้องกรอก)</span>
+            </span>
+          </div>
         </div>
 
-        <!-- STEP 1 -> SECTION 2.2: BLENDING SIDE DISPATCH TO BOTTLING (BUILDING 111 -> 113) -->
+        <!-- STEP 1: BLENDING SIDE DISPATCH TO BOTTLING (BUILDING 111 -> 113) -->
         <div id="form-step-1" class="liquid-glass rounded-3xl p-5 sm:p-6 space-y-4 ${stepCls(1)}">
           <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#1B3B2B]/15">
             <div class="flex items-center gap-2.5">
-              <div class="w-10 h-10 rounded-2xl bg-[#FF3EA5] text-white flex items-center justify-center font-bold text-sm">2.2</div>
+              <div class="w-10 h-10 rounded-2xl bg-[#FF3EA5] text-white flex items-center justify-center font-extrabold text-base">1</div>
               <div>
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFE3F2] text-[#9D115D]">ขั้นที่ 1 · เริ่มต้นที่นี่</span>
-                  <h3 class="text-base sm:text-lg font-bold text-[#1B3B2B]">ฝั่งปรุงสุรา · ส่งน้ำสุรา 40° จากอาคาร 111 ไปบรรจุอาคาร 113</h3>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFE3F2] text-[#9D115D]">ข้อ 1 · เริ่มต้นที่นี่</span>
+                  <h3 class="text-base sm:text-lg font-bold text-[#1B3B2B]">ส่งน้ำสุรา 40° จากอาคาร 111 ไปบรรจุอาคาร 113</h3>
                 </div>
-                <p class="text-xs text-[#436152]">กด "+ เพิ่มรายการจ่ายไปบรรจุ" ระบบดึงถังจ่ายต่อเนื่องจากวันก่อนให้อัตโนมัติ พร้อมซิงค์ยอดเข้า 2.1 และหักยอดก่อนปรุง 2.3 ทันที</p>
+                <p class="text-xs text-[#436152]">กด "+ เพิ่มรายการจ่ายไปบรรจุ" ระบบดึงถังจ่ายต่อเนื่องจากวันก่อนให้อัตโนมัติ พร้อมซิงค์ยอดเข้าข้อ 2 และหักยอดก่อนปรุงข้อ 3 ทันที</p>
               </div>
             </div>
             <button type="button" onclick="addDispatchRow()" class="btn-pill bg-[#FFF0F8] hover:bg-[#FFE3F2] text-[#B8166F] border border-[#FF3EA5]/40 px-3 py-1.5 text-xs">
@@ -5037,7 +5259,7 @@
             </button>
           </div>
           <div class="text-[11px] px-3 py-1.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900">
-            <b>Hint ขั้นที่ 1:</b> กรอกยอดส่งไปบรรจุของแต่ละถัง อ.111 ก่อน เพื่อให้ระบบหักน้ำสุราออกจากถังบ่ม (ใช้คำนวณพื้นที่ว่างรับปรุงในขั้นที่ 3) และส่งยอดรวมไปใส่ช่อง "ยอดรับลงถัง" ในขั้นที่ 2 (2.1) อัตโนมัติ
+            <b>Hint ข้อ 1:</b> กรอกยอดส่งไปบรรจุของแต่ละถัง อ.111 ก่อน เพื่อให้ระบบหักน้ำสุราออกจากถังบ่ม (ใช้คำนวณพื้นที่ว่างรับปรุงในข้อ 3) และส่งยอดรวมไปใส่ช่อง "ยอดรับลงถัง" ในข้อ 2 อัตโนมัติ (คอลัมน์สีเขียวคำนวณอัตโนมัติ)
           </div>
 
           <div class="overflow-x-auto">
@@ -5045,19 +5267,19 @@
               <thead>
                 <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                   <th class="py-2.5 px-2 text-center">ถังจ่าย อ.111</th>
-                  <th class="py-2.5 px-2 text-center">ยอดยกมาของถัง (L)</th>
+                  <th class="py-2.5 px-2 text-center th-auto-calc">ยอดยกมาของถัง (L) <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
                   <th class="py-2.5 px-2 text-center">รหัสสาย/Lot</th>
                   <th class="py-2.5 px-2 text-center">ส่งไป ถังรอบรรจุ 1 (L)</th>
                   <th class="py-2.5 px-2 text-center">ส่งไป ถังรอบรรจุ 2 (L)</th>
-                  <th class="py-2.5 px-2 text-center">รวมส่งบรรจุ (L)</th>
-                  <th class="py-2.5 px-2 text-center">คงเหลือถัง อ.111 (L)</th>
+                  <th class="py-2.5 px-2 text-center th-auto-calc">รวมส่งบรรจุ (L) <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
+                  <th class="py-2.5 px-2 text-center th-auto-calc">คงเหลือถัง อ.111 (L) <span class="badge-auto-ro ml-0.5">อัตโนมัติ</span></th>
                   <th class="py-2.5 px-2 text-center">SAP Order 1 / 2</th>
                   <th class="py-2.5 px-2 text-center">ลบ</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-200/70">
                 ${(day.dispatchesToBottling || []).map((dp, idx) => {
-          const tRow = recon.tankRows[dp.tankId] || { opening: 0, ending: 0, warnings: [] };
+          const tRow = recon.tankRows[dp.tankId] || { opening: 0, ending: 0, colE: 0, colF: 0, colI: 0, warnings: [] };
           const rowSum = (Number(dp.toPrep1) || 0) + (Number(dp.toPrep2) || 0);
           return `
                     <tr class="bg-white/90 hover:bg-blue-50/40">
@@ -5069,23 +5291,23 @@
           }).join('')}
                         </select>
                       </td>
-                      <td data-out="dp-${idx}-opening" class="py-2 px-2 text-right font-bold tabular-nums text-slate-700">${fmtNum(tRow.opening)}</td>
+                      <td data-out="dp-${idx}-opening" class="py-2 px-2 text-right font-bold tabular-nums text-slate-700 td-auto-calc">${fmtNum(tRow.opening)}</td>
                       <td class="py-2 px-2">
                         <input data-fk="dp-${idx}-lineCode" type="text" class="field-input text-xs text-center py-1.5 w-20 mx-auto" value="${escHtml(dp.lineCode || '')}"
                           oninput="updateDispatchRow(${idx}, 'lineCode', this.value)" />
                       </td>
                       <td class="py-2 px-2">
-                        <input data-fk="dp-${idx}-toPrep1" type="number" step="0.01" class="field-input text-xs text-right font-bold text-blue-800 py-1.5 w-28 ml-auto"
+                        <input data-fk="dp-${idx}-toPrep1" type="number" min="0" step="0.01" class="field-input text-xs text-right font-bold text-blue-800 py-1.5 w-28 ml-auto"
                           value="${dp.toPrep1}" oninput="updateDispatchRow(${idx}, 'toPrep1', this.value)" />
                       </td>
                       <td class="py-2 px-2">
-                        <input data-fk="dp-${idx}-toPrep2" type="number" step="0.01" class="field-input text-xs text-right font-bold text-indigo-800 py-1.5 w-28 ml-auto"
+                        <input data-fk="dp-${idx}-toPrep2" type="number" min="0" step="0.01" class="field-input text-xs text-right font-bold text-indigo-800 py-1.5 w-28 ml-auto"
                           value="${dp.toPrep2}" oninput="updateDispatchRow(${idx}, 'toPrep2', this.value)" />
                       </td>
-                      <td data-out="dp-${idx}-rowSum" class="py-2 px-2 text-right font-bold tabular-nums text-slate-900">${fmtNum(rowSum)}</td>
-                      <td data-out="dp-${idx}-ending" class="py-2 px-2 text-right font-bold tabular-nums ${tRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">
+                      <td data-out="dp-${idx}-rowSum" class="py-2 px-2 text-right font-bold tabular-nums text-slate-900 td-auto-calc">${fmtNum(rowSum)}</td>
+                      <td data-out="dp-${idx}-ending" class="py-2 px-2 text-right font-bold tabular-nums td-auto-calc ${tRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">
                         ${fmtNum(tRow.ending)}
-                        ${tRow.receiveBlend > 0 || tRow.colE > 0 ? `<div class="text-[10px] text-teal-600">(รวมรับปรุง +${fmtNum(tRow.colE + tRow.colF - tRow.colI)})</div>` : ''}
+                        ${(tRow.colE + tRow.colF - tRow.colI) > 0.001 ? `<div class="text-[10px] text-teal-600">(รวมรับปรุง +${fmtNum(tRow.colE + tRow.colF - tRow.colI)})</div>` : ''}
                       </td>
                       <td class="py-2 px-2">
                         <div class="flex gap-1">
@@ -5103,26 +5325,26 @@
         }).join('')}
               </tbody>
               <tfoot>
-                <tr class="bg-indigo-50/80 font-bold text-slate-900 border-t-2 border-indigo-200">
-                  <td colspan="3" class="py-2.5 px-2 text-right">รวมยอดส่งไปถังรอบรรจุ 1 และ 2:</td>
+                <tr class="bg-[#E4EFE8] font-bold text-slate-900 border-t-2 border-[#1F8A65]/40">
+                  <td colspan="3" class="py-2.5 px-2 text-right">รวมยอดส่งไปถังรอบรรจุ 1 และ 2 <span class="badge-auto-ro ml-1">คำนวณอัตโนมัติ</span>:</td>
                   <td data-out="dp-sum1" class="py-2.5 px-2 text-right text-blue-800 tabular-nums">${fmtNum(sumDispatchPrep1)} L</td>
                   <td data-out="dp-sum2" class="py-2.5 px-2 text-right text-indigo-800 tabular-nums">${fmtNum(sumDispatchPrep2)} L</td>
                   <td data-out="dp-sumAll" class="py-2.5 px-2 text-right text-slate-900 tabular-nums">${fmtNum(sumDispatchPrep1 + sumDispatchPrep2)} L</td>
-                  <td colspan="3" class="py-2.5 px-2 text-xs text-slate-600">รวมคงเหลือ อ.111 ทั้งหมด: <b data-out="s111-ending">${fmtNum(recon.summary111.ending)} L</b></td>
+                  <td colspan="3" class="py-2.5 px-2 text-xs text-slate-700">รวมคงเหลือ อ.111 ทั้งหมด: <b data-out="s111-ending">${fmtNum(recon.summary111.ending)} L</b></td>
                 </tr>
               </tfoot>
             </table>
           </div>
         </div>
 
-        <!-- STEP 2 -> SECTION 2.1: BOTTLING SIDE (BUILDING 113) -->
+        <!-- STEP 2: BOTTLING SIDE (BUILDING 113) -->
         <div id="form-step-2" class="liquid-glass rounded-3xl p-5 sm:p-6 space-y-4 ${stepCls(2)}">
           <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#1B3B2B]/15">
             <div class="flex items-center gap-2.5">
-              <div class="w-10 h-10 rounded-2xl bg-[#FF3EA5] text-white flex items-center justify-center font-bold text-sm">2.1</div>
+              <div class="w-10 h-10 rounded-2xl bg-[#FF3EA5] text-white flex items-center justify-center font-extrabold text-base">2</div>
               <div>
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFE3F2] text-[#9D115D]">ขั้นที่ 2</span>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFE3F2] text-[#9D115D]">ข้อ 2</span>
                   <h3 class="text-base sm:text-lg font-bold text-[#1B3B2B]">ฝั่งบรรจุ (อาคาร 113 · ถังรอบรรจุ 1 และ ถังรอบรรจุ 2)</h3>
                 </div>
                 <p class="text-xs text-[#436152]">ยอดยกมาและยอดรับลงถังซิงค์อัตโนมัติ (Working Volume ถังละ ${fmtNum(p1Row.workingVol)} L) · คงเหลือ = ยกมา + รับลงถัง − จ่ายบรรจุ − ตกพื้น</p>
@@ -5131,34 +5353,42 @@
             <span class="contents" data-out="s113-badge">${renderSpiritBadge('สุราขาว 40 ดีกรี', 40, `รวมคงเหลือ อ.113: ${fmtNum(recon.summary113.ending)} L`)}</span>
           </div>
           <div class="text-[11px] px-3 py-1.5 rounded-xl bg-blue-50/90 border border-blue-200 text-blue-900">
-            <b>Hint ขั้นที่ 2:</b> ตรวจสอบยอดรับลงถัง (ซิงค์จากขั้นที่ 1 ให้อัตโนมัติ) แล้วกรอก <b>ยอดจ่ายบรรจุ (L)</b>, <b>น้ำสุราตกพื้น (L)</b> และ <b>เลขคำสั่ง SAP</b> เพื่อสรุปคงเหลือ อ.113
+            <b>Hint ข้อ 2:</b> ตรวจสอบยอดรับลงถัง (ซิงค์จากข้อ 1 ให้อัตโนมัติ แก้ไขทับได้) แล้วกรอก <b>ยอดจ่ายบรรจุ (L)</b>, <b>น้ำสุราตกพื้น (L)</b> และ <b>เลขคำสั่ง SAP</b> ช่องสีเขียวจะคำนวณคงเหลือ อ.113 ให้อัตโนมัติ
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 resp-2col-grid">
             ${[
-          { key: 'prep1', title: 'ถังรอบรรจุ 1 (เตรียม 1/113)', sapLoc: '2201', row: p1Row, data: day.bottling.prep1, dispatchSum: sumDispatchPrep1 },
-          { key: 'prep2', title: 'ถังรอบรรจุ 2 (เตรียม 2/113)', sapLoc: '2202', row: p2Row, data: day.bottling.prep2, dispatchSum: sumDispatchPrep2 }
-        ].map((item) => `
+          { key: 'prep1', title: 'ถังรอบรรจุ 1 (เตรียม 1/113)', sapLoc: p1Row.sapLoc, row: p1Row, data: day.bottling.prep1, dispatchSum: sumDispatchPrep1 },
+          { key: 'prep2', title: 'ถังรอบรรจุ 2 (เตรียม 2/113)', sapLoc: p2Row.sapLoc, row: p2Row, data: day.bottling.prep2, dispatchSum: sumDispatchPrep2 }
+        ].map((item) => {
+          const isReceiveSynced = Math.abs((Number(item.data.receive) || 0) - item.dispatchSum) <= 0.01;
+          return `
               <div class="rounded-2xl bg-[#FFFDF7] border border-[#1B3B2B]/15 p-4 space-y-3">
                 <div class="flex items-center justify-between">
                   <div>
                     <div class="text-sm font-bold text-[#1B3B2B]">${item.title}</div>
-                    <div class="text-xs text-[#436152]">SAP Location ${item.sapLoc} · Working Vol ${fmtNum(item.row.workingVol)} L</div>
+                    <div class="text-xs text-[#436152]">SAP Location ${escHtml(item.sapLoc)} · Working Vol ${fmtNum(item.row.workingVol)} L</div>
                   </div>
                   <div data-out="bot-${item.key}-badges" class="flex gap-1">${item.row.badges.map((b) => getBadgeHtml(b, item.row.degree, item.row.spiritType)).join('')}</div>
                 </div>
 
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   <div>
-                    <label class="block text-[11px] font-bold text-slate-500 mb-1">ยอดยกมาอัตโนมัติ (L)</label>
-                    <input data-out="bot-${item.key}-opening" type="text" readonly class="field-input text-xs font-bold" value="${fmtNum(item.row.opening)}" />
+                    <label class="flex flex-wrap items-center gap-1 text-[11px] font-bold text-[#134E39] mb-1">
+                      <span>ยอดยกมา (L)</span>
+                      <span class="badge-auto-ro">อัตโนมัติ</span>
+                    </label>
+                    <input data-out="bot-${item.key}-opening" type="text" readonly class="field-input field-auto-readonly text-xs" value="${fmtNum(item.row.opening)}" />
                   </div>
                   <div>
-                    <label class="block text-[11px] font-bold text-blue-700 mb-1">ยอดรับลงถัง (L) *</label>
-                    <input data-fk="bot-${item.key}-receive" type="number" step="0.01" class="field-input text-xs font-bold text-blue-900"
+                    <label class="flex flex-wrap items-center gap-1 text-[11px] font-bold text-blue-800 mb-1">
+                      <span>ยอดรับลงถัง (L) *</span>
+                      <span data-out="bot-${item.key}-auto-pill" class="${isReceiveSynced ? '' : 'hidden '}badge-auto-edit">ดึงจากข้อ 1 · แก้ได้</span>
+                    </label>
+                    <input data-fk="bot-${item.key}-receive" type="number" min="0" step="0.01" class="field-input text-xs font-bold ${isReceiveSynced ? 'field-auto-editable' : 'text-blue-900'}"
                       value="${item.data.receive}"
                       oninput="updateBottlingField('${item.key}', 'receive', this.value)" />
-                    <div data-out="bot-${item.key}-sync-hint" class="${Math.abs((Number(item.data.receive) || 0) - item.dispatchSum) > 0.01 ? '' : 'hidden '}text-[10px] text-amber-700 mt-0.5">ยอดส่งจาก 2.2 = ${fmtNum(item.dispatchSum)} L</div>
+                    <div data-out="bot-${item.key}-sync-hint" class="${!isReceiveSynced ? '' : 'hidden '}text-[10px] text-amber-700 mt-0.5">ยอดส่งจากข้อ 1 = ${fmtNum(item.dispatchSum)} L</div>
                   </div>
                   <div>
                     <label class="block text-[11px] font-bold text-slate-700 mb-1">เลขคำสั่ง SAP (Order)</label>
@@ -5168,36 +5398,40 @@
                   </div>
                   <div>
                     <label class="block text-[11px] font-bold text-indigo-700 mb-1">ยอดจ่ายบรรจุ (L) *</label>
-                    <input data-fk="bot-${item.key}-discharge" type="number" step="0.01" class="field-input text-xs font-bold text-indigo-900"
+                    <input data-fk="bot-${item.key}-discharge" type="number" min="0" step="0.01" class="field-input text-xs font-bold text-indigo-900"
                       value="${item.data.discharge}"
                       oninput="updateBottlingField('${item.key}', 'discharge', this.value)" />
                   </div>
                   <div>
                     <label class="block text-[11px] font-bold text-rose-700 mb-1">น้ำสุราตกพื้น (L)</label>
-                    <input data-fk="bot-${item.key}-floorLoss" type="number" step="0.01" class="field-input text-xs font-bold text-rose-800"
+                    <input data-fk="bot-${item.key}-floorLoss" type="number" min="0" step="0.01" class="field-input text-xs font-bold text-rose-800"
                       value="${item.data.floorLoss}"
                       oninput="updateBottlingField('${item.key}', 'floorLoss', this.value)" />
                   </div>
                   <div>
-                    <label class="block text-[11px] font-bold text-emerald-700 mb-1">ยอดคงเหลืออัตโนมัติ (L)</label>
-                    <input data-out="bot-${item.key}-ending" type="text" readonly class="field-input text-xs font-bold !bg-emerald-50 !text-emerald-900 !border-emerald-300"
+                    <label class="flex flex-wrap items-center gap-1 text-[11px] font-bold text-[#134E39] mb-1">
+                      <span>ยอดคงเหลือ (L)</span>
+                      <span class="badge-auto-ro">คำนวณอัตโนมัติ</span>
+                    </label>
+                    <input data-out="bot-${item.key}-ending" type="text" readonly class="field-input field-auto-readonly text-xs"
                       value="${fmtNum(item.row.ending)}" />
                   </div>
                 </div>
               </div>
-            `).join('')}
+            `;
+        }).join('')}
           </div>
         </div>
 
-        <!-- STEP 3 -> SECTION 2.3: BLENDING CALCULATOR & NON-FIFO TANK SELECTION WITH HOLD & 20,000L HEEL RULE -->
+        <!-- STEP 3: BLENDING CALCULATOR & NON-FIFO TANK SELECTION WITH HOLD & 20,000L HEEL RULE -->
         <div id="form-step-3" class="liquid-glass rounded-3xl p-5 sm:p-6 space-y-5 ${stepCls(3)}">
           <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#1B3B2B]/15">
             <div class="flex items-center gap-2.5">
-              <div class="w-10 h-10 rounded-2xl bg-[#1B3B2B] text-[#FFFDF7] flex items-center justify-center font-bold text-sm">2.3</div>
+              <div class="w-10 h-10 rounded-2xl bg-[#1B3B2B] text-[#FFFDF7] flex items-center justify-center font-extrabold text-base">3</div>
               <div>
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#DCF5EB] text-[#134E39]">ขั้นที่ 3</span>
-                  <h3 class="text-base sm:text-lg font-bold text-[#1B3B2B]">ฟอร์มปรุงสุรา 40° (เลือกถังดีกรีสูง อ.110 จ่ายปรุง → ถังเก็บบ่ม อ.111 รับปรุง แบบข้ามถัง Hold / Non-FIFO)</h3>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#DCF5EB] text-[#134E39]">ข้อ 3</span>
+                  <h3 class="text-base sm:text-lg font-bold text-[#1B3B2B]">ฟอร์มปรุงสุรา 40° (เลือกถังเก็บบ่ม อ.111 รับปรุง และถังดีกรีสูง อ.110 จ่ายปรุง แบบข้ามถัง Hold / Non-FIFO)</h3>
                 </div>
                 <p class="text-xs text-[#436152]">ติด Badge "จ่ายปรุง" / "รับปรุง" อัตโนมัติ · บังคับเกณฑ์น้ำสุราค้างถัง (Heel) ไม่ต่ำกว่า 20,000.00 ลิตร (1,000 เท)</p>
               </div>
@@ -5208,53 +5442,122 @@
             </div>
           </div>
           <div class="text-[11px] px-3 py-1.5 rounded-xl bg-teal-50/90 border border-teal-200 text-teal-900">
-            <b>Hint ขั้นที่ 3 (ลำดับย่อย):</b> <b>3.1</b> ใส่จำนวนถังปรุง (เมื่อลดจำนวน แถวถังปรุง/ถัง 70° จะตัดตามทันที) → <b>3.2</b> เลือกถังรับปรุง อ.111 → <b>3.3</b> ยอดเทถังสุดท้าย (ระบบเรียนรู้ประมาณการให้อัตโนมัติ / กรอกค่าวัดจริงทับได้) → <b>3.4</b> ผล 70°/40° อัตโนมัติจาก 3.1+3.2+3.3 → <b>3.5</b> เลือกถัง 70° อ.110 → <b>3.6</b> กรอกเลข SAP / MatDoc
+            <b>Hint ข้อ 3 (เรียงตามลำดับการกรอกและคำนวณ):</b> <b>3.1</b> จำนวนถังปรุง → <b>3.2</b> Batch No. → <b>3.3</b> เลือกถังเก็บบ่ม 40° อ.111 ที่รับปรุง → <b>3.4</b> ยอดเทถังสุดท้าย → <b>3.5</b> ผลคำนวณ 70°/40° อัตโนมัติ → <b>3.6</b> เลือกถัง 70° อ.110 → <b>3.7–3.8</b> กรอกเลข SAP / MatDoc
           </div>
 
-          <!-- Top Blending Parameters -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white/90 p-4 rounded-2xl border border-slate-200">
+          <!-- Band 1: 3.1 Batch Count & 3.2 Start Batch No -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white/90 p-4 rounded-2xl border border-slate-200">
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">3.1 จำนวนถังที่ปรุงได้ของวันก่อน (ถัง) *</label>
+              <label class="block text-xs font-bold text-slate-700 mb-1">3.1 จำนวนถังที่ปรุงได้ (ถัง) *</label>
               <input data-fk="bl-batchCount" type="number" min="0" max="30" class="field-input font-bold text-teal-900"
                 value="${day.blending.batchCount}"
                 oninput="updateBlendingParam('batchCount', this.value)" />
-              <div class="text-[11px] text-slate-500 mt-0.5">ต.ย. 17 พ.ย. 69 = 7 ถัง (เพิ่ม/ลดแถวถังปรุงทันที)</div>
+              <div class="text-[11px] text-slate-500 mt-0.5">ต.ย. 17 พ.ย. 69 = 7 ถัง (เพิ่ม/ลดแถวถังปรุงในตาราง 3.7 ทันที)</div>
             </div>
             <div>
-              <div class="flex items-center justify-between gap-1 mb-1">
-                <label class="block text-xs font-bold text-slate-700">เลขถังปรุงเริ่มต้น (Batch No.)</label>
+              <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
+                <label class="flex flex-wrap items-center gap-1.5 text-xs font-bold text-slate-700">
+                  <span>3.2 เลขถังปรุงเริ่มต้น (Batch No.)</span>
+                  <span data-out="bl-batch-auto-pill" class="${!day.blending.startBatchNoManual ? '' : 'hidden '}badge-auto-edit">อัตโนมัติ · แก้ได้</span>
+                </label>
                 <span data-out="bl-batch-reset" class="${day.blending.startBatchNoManual ? '' : 'hidden'}">
                   <button type="button" onclick="resetStartBatchNoAuto()" class="text-[10px] font-bold text-teal-700 hover:underline shrink-0">ไล่จากวันก่อน</button>
                 </span>
               </div>
-              <input data-fk="bl-startBatchNo" type="number" min="1" class="field-input font-bold"
+              <input data-fk="bl-startBatchNo" type="number" min="1" class="field-input font-bold ${!day.blending.startBatchNoManual ? 'field-auto-editable' : ''}"
                 value="${day.blending.startBatchNo}"
                 oninput="updateBlendingParam('startBatchNo', this.value)" />
-              <div data-out="bl-batch-range" class="text-[11px] text-slate-500 mt-0.5">
+              <div data-out="bl-batch-range" class="text-[11px] text-slate-600 mt-0.5">
                 ช่วงวันนี้: <b>${bp.N > 0 ? `${day.blending.startBatchNo} – ${Number(day.blending.startBatchNo) + bp.N - 1}` : '-'}</b> · ${day.blending.startBatchNoManual ? 'กำหนดเอง' : 'ไล่ต่อเนื่องจากวันก่อนอัตโนมัติ'}
               </div>
             </div>
+          </div>
+
+          <!-- Band 2: 3.3 Receiving Aging Tanks (Building 111) Non-FIFO -->
+          <div class="rounded-2xl bg-white/95 border border-slate-200 p-4 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>3.3 เลือกถังเก็บบ่ม 40° อาคาร 111 รับน้ำสุราที่ปรุงได้</span>
+                  <span class="badge-single-line px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">Badge: รับปรุง</span>
+                </div>
+                <p class="text-xs text-slate-500">เลือกก่อนคำนวณยอดปรุง 3.4–3.5 · ไม่ต้องเรียง FIFO · ข้ามถัง Hold ได้ · ถังก่อนหน้าเติมจนเต็มความจุแล้วโอนล้นไปถังถัดไป</p>
+              </div>
+              <button type="button" onclick="addReceive40Tank()" class="btn-pill bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 px-3 py-1.5 text-xs">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i> เพิ่มถังรับปรุง
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+              ${(day.blending.receivingTanks40 || []).map((tid, idx) => {
+          const tf = bp.tankFlow[tid] || { opening: 0, outBottling: 0, needToFull: 0, netReceive: 0, ending: 0 };
+          const isLast = idx === (day.blending.receivingTanks40.length - 1);
+          return `
+                  <div class="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="flex items-center gap-2 flex-1 min-w-0">
+                        <span class="w-6 h-6 rounded-full bg-teal-600 text-white text-xs font-bold flex items-center justify-center shrink-0">${['①', '②', '③', '④', '⑤'][idx] || (idx + 1)}</span>
+                        <select data-fk="recv40-${idx}" class="field-input text-xs font-bold py-1.5 max-w-[215px]" onchange="updateReceive40Tank(${idx}, this.value)">
+                          ${b111Tanks.map((t) => {
+            const held = appState.holdTanks[t.id]?.held;
+            return `<option value="${t.id}" ${t.id === tid ? 'selected' : ''}>${t.id} (ยกมา ${fmtNum(recon.tankRows[t.id]?.opening || 0)} L)${held ? ' [Hold-ข้าม]' : ''}</option>`;
+          }).join('')}
+                        </select>
+                        <span class="badge-single-line px-2 py-0.5 rounded-full text-[10px] font-bold ${isLast ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'}">
+                          ${isLast ? 'ถังสุดท้ายของวัน (เทียบยอดเท)' : 'เติมเต็มความจุถัง'}
+                        </span>
+                      </div>
+                      <button type="button" onclick="removeReceive40Tank(${idx})" class="p-1 text-rose-600 hover:bg-rose-50 rounded shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] px-2.5 py-1.5 rounded-lg bg-[#E4EFE8]/75 border border-[#1F8A65]/30">
+                      <span class="badge-auto-ro">คำนวณอัตโนมัติ</span>
+                      <div>ยกมา: <b data-out="recv40-${idx}-opening">${fmtNum(tf.opening)}</b></div>
+                      <div>จ่ายบรรจุ: <b data-out="recv40-${idx}-out" class="text-blue-700">${fmtNum(tf.outBottling)}</b></div>
+                      <div>รับปรุงสุทธิ: <b data-out="recv40-${idx}-net" class="text-teal-700">+${fmtNum(tf.netReceive)}</b></div>
+                      <div>คงเหลือ: <b data-out="recv40-${idx}-ending" class="${tf.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">${fmtNum(tf.ending)} L</b></div>
+                    </div>
+                  </div>
+                `;
+        }).join('')}
+            </div>
+
+            <!-- Quick Hold Switcher for Building 110 & 111 -->
+            <div class="pt-2 border-t border-slate-200">
+              <div class="text-[11px] font-bold text-slate-600 mb-1.5">ถังที่ติดสถานะ Hold (ข้ามไม่นำมาใช้ตาม FIFO เพราะค่าไม่ปกติ/รอบ่ม):</div>
+              <div class="flex flex-wrap gap-1.5">
+                ${Object.entries(appState.holdTanks).filter(([, v]) => v?.held).map(([tid, v]) => `
+                  <button type="button" onclick="openTankDetailModal('${escHtml(tid)}')" class="badge-single-line gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200 hover:bg-rose-200">
+                    <i data-lucide="pause-circle" class="w-3 h-3"></i> ${escHtml(tid)}: ${escHtml(v.reason || 'Hold')}
+                  </button>
+                `).join('') || `<span class="text-xs text-slate-400">ไม่มีถังที่ติด Hold · คลิกที่การ์ดถังใดก็ได้เพื่อตั้ง Hold</span>`}
+              </div>
+            </div>
+          </div>
+
+          <!-- Band 3: 3.4 Last Tank Gauge (Te) & 3.5 Auto-Calculated 70° / 40° Per Batch -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 bg-white/95 p-4 rounded-2xl border border-slate-200">
             <div>
-              <div class="flex items-center justify-between gap-1 mb-1">
-                <label class="block text-xs font-bold text-teal-800">3.3 ยอดถังบ่มถังสุดท้ายของวัน (หน่วย: เท) *</label>
+              <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
+                <label class="text-xs font-bold text-teal-800">3.4 ยอดถังบ่มถังสุดท้ายของวัน (หน่วย: เท) *</label>
                 <span data-out="bl-gauge-auto-pill" class="shrink-0">
                   ${bp.isGaugeAuto
-                    ? `<span class="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">คาดการณ์อัตโนมัติ</span>`
+                    ? `<span class="badge-auto-edit">คาดการณ์อัตโนมัติ · แก้ได้</span>`
                     : `<button type="button" onclick="resetLastTankGaugeAuto()" class="text-[10px] font-bold text-teal-700 hover:underline">คำนวณอัตโนมัติ (~${fmtInt(bp.estimatedGaugeTe)})</button>`}
                 </span>
               </div>
-              <input data-fk="bl-gaugeTe" type="number" step="0.01" class="field-input font-bold text-teal-900 !border-teal-300"
+              <input data-fk="bl-gaugeTe" type="number" min="0" step="0.01" class="field-input font-bold ${bp.isGaugeAuto ? 'field-auto-editable' : 'text-teal-900 !border-teal-300'}"
                 value="${bp.isGaugeAuto ? bp.estimatedGaugeTe : day.blending.lastTankGaugeTe}"
                 oninput="updateBlendingParam('lastTankGaugeTe', this.value)" />
-              <div data-out="bl-gauge-hint" class="text-[11px] text-teal-700 mt-0.5">
+              <div data-out="bl-gauge-hint" class="mt-1.5 px-2.5 py-1.5 rounded-lg bg-[#E4EFE8]/75 border border-[#1F8A65]/30 text-[11px] text-[#134E39]">
+                <span class="badge-auto-ro mr-1">อัตโนมัติ</span>
                 ใช้ในสูตร: (${fmtNum(bp.gaugeTe)} − ${fmtNum(bp.lastBaseTe)}) × 20 = <b>${fmtNum(bp.approxNetLast)} L</b>${bp.isGaugeAuto ? ` · เรียนรู้เฉลี่ย ${fmtInt(bp.learnedAvg40)} L/ถัง` : ''}
               </div>
             </div>
             <div>
-              <div class="flex items-center justify-between gap-1 mb-1">
-                <label class="block text-xs font-bold text-slate-700">3.4 ผลคำนวณ 70° / 40° ต่อถังปรุง</label>
+              <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
+                <label class="text-xs font-bold text-slate-700">3.5 ผลคำนวณ 70° / 40° ต่อถังปรุง (จาก 3.1 + 3.3 + 3.4)</label>
                 <div class="flex items-center gap-1 shrink-0">
-                  <span data-out="bl-mode-badge" class="px-1.5 py-0.5 rounded text-[10px] font-bold ${bp.isManualOverride ? 'bg-amber-100 text-amber-800' : 'bg-teal-100 text-teal-800'}">${bp.isManualOverride ? 'กำหนดเอง' : 'อัตโนมัติ'}</span>
+                  <span data-out="bl-mode-badge" class="${bp.isManualOverride ? 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800' : 'badge-auto-edit'}">${bp.isManualOverride ? 'กำหนดเอง' : 'คำนวณอัตโนมัติ · แก้ได้'}</span>
                   <div class="inline-flex rounded-lg border border-slate-300 overflow-hidden text-[10px] font-bold">
                     <button type="button" onclick="setBlendingInputUnit('L')" class="px-1.5 py-0.5 ${unit === 'L' ? 'bg-[#1B3B2B] text-white' : 'bg-white text-slate-600'}">ลิตร</button>
                     <button type="button" onclick="setBlendingInputUnit('te')" class="px-1.5 py-0.5 ${unit === 'te' ? 'bg-[#1B3B2B] text-white' : 'bg-white text-slate-600'}">เท</button>
@@ -5264,147 +5567,87 @@
                   </span>
                 </div>
               </div>
-              <div class="p-2 rounded-xl bg-teal-50/80 border border-teal-200 text-xs space-y-1.5">
-                <div class="grid grid-cols-2 gap-1.5">
+              <div class="p-2.5 rounded-xl bg-[#E4EFE8]/70 border border-[#1F8A65]/35 text-xs space-y-1.5">
+                <div class="grid grid-cols-2 gap-2">
                   <div>
-                    <span class="block text-[10px] font-bold text-amber-900">70° / ถัง (${unit === 'te' ? 'เท' : 'L'})</span>
-                    <input data-fk="bl-vol70" type="number" step="any" min="0" class="field-input text-xs font-bold text-amber-900 py-1 px-2 text-right bg-white"
+                    <span class="block text-[10px] font-bold text-amber-900 mb-0.5">70° / ถัง (${unit === 'te' ? 'เท' : 'L'})</span>
+                    <input data-fk="bl-vol70" type="number" step="any" min="0" class="field-input text-xs font-bold py-1 px-2 text-right ${!bp.isManualOverride ? 'field-auto-editable' : 'bg-white text-amber-900'}"
                       value="${disp70}"
                       oninput="updateCustomBlendingVol('vol70', this.value)" />
-                    <div data-out="bl-conv70" class="text-[10px] text-amber-800 text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol70)} L` : `${fmtNum(bp.activeVol70 / 20)} เท`}</div>
+                    <div data-out="bl-conv70" class="text-[10px] text-[#134E39] font-semibold text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol70)} L` : `${fmtNum(bp.activeVol70 / 20)} เท`}</div>
                   </div>
                   <div>
-                    <span class="block text-[10px] font-bold text-teal-900">40° / ถัง (1) (${unit === 'te' ? 'เท' : 'L'})</span>
-                    <input data-fk="bl-vol40" type="number" step="any" min="0" class="field-input text-xs font-bold text-teal-900 py-1 px-2 text-right bg-white"
+                    <span class="block text-[10px] font-bold text-teal-900 mb-0.5">40° / ถัง (${unit === 'te' ? 'เท' : 'L'})</span>
+                    <input data-fk="bl-vol40" type="number" step="any" min="0" class="field-input text-xs font-bold py-1 px-2 text-right ${!bp.isManualOverride ? 'field-auto-editable' : 'bg-white text-teal-900'}"
                       value="${disp40}"
                       oninput="updateCustomBlendingVol('vol40', this.value)" />
-                    <div data-out="bl-conv40" class="text-[10px] text-teal-800 text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol40)} L` : `${fmtNum(bp.activeVol40 / 20)} เท`}</div>
+                    <div data-out="bl-conv40" class="text-[10px] text-[#134E39] font-semibold text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol40)} L` : `${fmtNum(bp.activeVol40 / 20)} เท`}</div>
                   </div>
                 </div>
-                <div data-out="bl-auto-hint" class="text-[10px] text-slate-600 flex flex-wrap items-center justify-between gap-1">
-                  <span>ดิบ: ${bp.avg40Raw ? bp.avg40Raw.toFixed(2) : '0.00'} → อัตโนมัติ (±6): <b>${fmtInt(bp.autoVol70)}</b> / <b>${fmtInt(bp.autoVol40)} L</b></span>
+                <div data-out="bl-auto-hint" class="text-[10px] text-[#134E39] flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-[#1F8A65]/20">
+                  <span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ดิบ: ${bp.avg40Raw ? bp.avg40Raw.toFixed(2) : '0.00'} → ลงตัว (±6): <b>${fmtInt(bp.autoVol70)}</b> / <b>${fmtInt(bp.autoVol40)} L</b></span>
                   ${Math.abs(bp.activeVol70 - Math.round(bp.activeVol70)) > 0.0001 ? '<span class="text-rose-700 font-bold">70° มีทศนิยม</span>' : ''}
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Two Columns: Left = 70° Source Tanks (Bldg 110), Right = 40° Receiving Aging Tanks (Bldg 111) -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 resp-2col-grid">
-            <!-- 70° High-Degree Source Tanks (Building 110) -->
-            <div class="rounded-2xl bg-white/95 border border-slate-200 p-4 space-y-3">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <span>3.5 เลือกถังดีกรีสูง 70° อาคาร 110 ที่นำมาปรุง</span>
-                    <span class="badge-single-line px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">Badge: จ่ายปรุง</span>
-                  </div>
-                  <p class="text-xs text-slate-500">เลือกข้ามถังที่ติด Hold ได้ · เตือนอัตโนมัติหากคงเหลือต่ำกว่า 20,000.00 ลิตร</p>
+          <!-- Band 4: 3.6 High-Degree 70° Source Tanks (Building 110) -->
+          <div class="rounded-2xl bg-white/95 border border-slate-200 p-4 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div class="text-sm font-bold text-slate-900 flex flex-wrap items-center gap-2">
+                  <span>3.6 เลือกถังดีกรีสูง 70° อาคาร 110 ที่นำมาปรุง</span>
+                  <span class="badge-single-line px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">Badge: จ่ายปรุง</span>
+                  <span data-out="src70-sum-hint" class="badge-single-line px-2 py-0.5 rounded-full text-[10px] font-bold border ${srcBatchDiff === 0 ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300'}">
+                    ${srcBatchDiff === 0 ? `✓ ครบ ${bp.N} ถังปรุงตามข้อ 3.1` : `⚠️ รวม ${sumSrcBatches} ถัง (ข้อ 3.1 = ${bp.N} ถัง)`}
+                  </span>
                 </div>
-                <button type="button" onclick="addSource70Row()" class="btn-pill bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 text-xs">
-                  <i data-lucide="plus" class="w-3.5 h-3.5"></i> เพิ่มถัง 70°
-                </button>
+                <p class="text-xs text-slate-500">เลือกข้ามถังที่ติด Hold ได้ · เตือนอัตโนมัติหากคงเหลือต่ำกว่า 20,000.00 ลิตร</p>
               </div>
+              <button type="button" onclick="addSource70Row()" class="btn-pill bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 text-xs">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i> เพิ่มถัง 70°
+              </button>
+            </div>
 
-              <div class="space-y-2">
-                ${(day.blending.sourceTanks70 || []).map((s, idx) => {
-          const tRow = recon.tankRows[s.tankId] || { opening: 0, colG: 0, ending: 0, isHeld: false };
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+              ${(day.blending.sourceTanks70 || []).map((s, idx) => {
+          const tRow = recon.tankRows[s.tankId] || { opening: 0, colF: 0, colG: 0, ending: 0, isHeld: false };
           const below20k = tRow.ending < 20000;
           return `
-                    <div class="p-3 rounded-xl border ${below20k ? 'border-amber-400 bg-amber-50/40' : 'border-slate-200 bg-slate-50/70'} space-y-2">
-                      <div class="grid grid-cols-12 gap-2 items-center">
-                        <div class="col-span-5">
-                          <label class="block text-[10px] font-bold text-slate-500">ถัง 70° (อ.110)</label>
-                          <select data-fk="src70-${idx}-tankId" class="field-input text-xs font-bold py-1.5" onchange="updateSource70Row(${idx}, 'tankId', this.value)">
-                            ${b110Tanks.map((t) => {
+                  <div class="p-3 rounded-xl border ${below20k ? 'border-amber-400 bg-amber-50/40' : 'border-slate-200 bg-slate-50/70'} space-y-2">
+                    <div class="grid grid-cols-12 gap-2 items-center">
+                      <div class="col-span-5">
+                        <label class="block text-[10px] font-bold text-slate-500">ถัง 70° (อ.110)</label>
+                        <select data-fk="src70-${idx}-tankId" class="field-input text-xs font-bold py-1.5" onchange="updateSource70Row(${idx}, 'tankId', this.value)">
+                          ${b110Tanks.map((t) => {
             const held = appState.holdTanks[t.id]?.held;
             return `<option value="${t.id}" ${t.id === s.tankId ? 'selected' : ''}>${t.id} (ยกมา ${fmtNum(recon.tankRows[t.id]?.opening || 0)} L)${held ? ' [Hold-ข้าม]' : ''}</option>`;
           }).join('')}
-                          </select>
-                        </div>
-                        <div class="col-span-3">
-                          <label class="block text-[10px] font-bold text-slate-500">จำนวนถังปรุง</label>
-                          <input data-fk="src70-${idx}-batches" type="number" min="0" max="30" class="field-input text-xs font-bold text-center py-1.5"
-                            value="${s.batches}" oninput="updateSource70Row(${idx}, 'batches', this.value)" />
-                        </div>
-                        <div class="col-span-3 text-right">
-                          <div class="text-[10px] font-bold text-slate-500">จ่ายปรุง 70°</div>
-                          <div data-out="src70-${idx}-colG" class="text-xs font-bold text-amber-800 tabular-nums">${fmtNum(tRow.colG)} L</div>
-                        </div>
-                        <div class="col-span-1 text-right">
-                          <button type="button" onclick="removeSource70Row(${idx})" class="p-1 text-rose-600 hover:bg-rose-50 rounded"><i data-lucide="x" class="w-4 h-4"></i></button>
-                        </div>
+                        </select>
                       </div>
-                      <div class="flex flex-wrap items-center justify-between text-[11px] pt-1 border-t border-slate-200/70">
-                        <span data-out="src70-${idx}-meta">ยกมา: <b>${fmtNum(tRow.opening)} L</b> ${tRow.colF > 0 ? `· รับโอนวันนี้: <b class="text-cyan-700">+${fmtNum(tRow.colF)} L</b>` : ''}</span>
-                        <span data-out="src70-${idx}-ending" class="font-bold ${below20k ? 'text-rose-600' : 'text-emerald-700'}">
-                          คงเหลือ: ${fmtNum(tRow.ending)} L ${below20k ? '⚠️ ต่ำกว่าเกณฑ์ 20,000.00 L (ต้องรับโอนเพิ่ม)' : '✓ ผ่านเกณฑ์ ≥ 20,000.00 L'}
-                        </span>
+                      <div class="col-span-3">
+                        <label class="block text-[10px] font-bold text-slate-500">จำนวนถังปรุง</label>
+                        <input data-fk="src70-${idx}-batches" type="number" min="0" max="30" class="field-input text-xs font-bold text-center py-1.5"
+                          value="${s.batches}" oninput="updateSource70Row(${idx}, 'batches', this.value)" />
+                      </div>
+                      <div class="col-span-3 text-right rounded-lg bg-[#E4EFE8]/75 border border-[#1F8A65]/30 px-2 py-1">
+                        <div class="text-[10px] font-bold text-[#134E39]">จ่ายปรุง 70° <span class="badge-auto-ro">อัตโนมัติ</span></div>
+                        <div data-out="src70-${idx}-colG" class="text-xs font-bold text-amber-900 tabular-nums">${fmtNum(tRow.colG)} L</div>
+                      </div>
+                      <div class="col-span-1 text-right">
+                        <button type="button" onclick="removeSource70Row(${idx})" class="p-1 text-rose-600 hover:bg-rose-50 rounded"><i data-lucide="x" class="w-4 h-4"></i></button>
                       </div>
                     </div>
-                  `;
-        }).join('')}
-              </div>
-            </div>
-
-            <!-- 40° Receiving Aging Tanks (Building 111) Non-FIFO -->
-            <div class="rounded-2xl bg-white/95 border border-slate-200 p-4 space-y-3">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <span>3.2 เลือกถังเก็บบ่ม 40° อาคาร 111 รับน้ำสุราที่ปรุงได้</span>
-                    <span class="badge-single-line px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">Badge: รับปรุง</span>
+                    <div class="flex flex-wrap items-center justify-between gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg bg-[#E4EFE8]/60 border border-[#1F8A65]/25">
+                      <span data-out="src70-${idx}-meta"><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ยกมา: <b>${fmtNum(tRow.opening)} L</b> ${tRow.colF > 0 ? `· รับโอนวันนี้: <b class="text-cyan-700">+${fmtNum(tRow.colF)} L</b>` : ''}</span>
+                      <span data-out="src70-${idx}-ending" class="font-bold ${below20k ? 'text-rose-600' : 'text-emerald-700'}">
+                        คงเหลือ: ${fmtNum(tRow.ending)} L ${below20k ? '⚠️ ต่ำกว่าเกณฑ์ 20,000.00 L (ต้องรับโอนเพิ่ม)' : '✓ ผ่านเกณฑ์ ≥ 20,000.00 L'}
+                      </span>
+                    </div>
                   </div>
-                  <p class="text-xs text-slate-500">ไม่ต้องเรียง FIFO · ข้ามถังที่ติด Hold ได้ · ถังก่อนหน้าเติมจนเต็ม 110,000.00 L แล้วโอนล้นไปถังถัดไป</p>
-                </div>
-                <button type="button" onclick="addReceive40Tank()" class="btn-pill bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 px-2.5 py-1 text-xs">
-                  <i data-lucide="plus" class="w-3.5 h-3.5"></i> เพิ่มถังรับปรุง
-                </button>
-              </div>
-
-              <div class="space-y-2">
-                ${(day.blending.receivingTanks40 || []).map((tid, idx) => {
-          const tf = bp.tankFlow[tid] || { opening: 0, outBottling: 0, needToFull: 0, netReceive: 0, ending: 0 };
-          const isLast = idx === (day.blending.receivingTanks40.length - 1);
-          return `
-                    <div class="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-1.5">
-                      <div class="flex items-center justify-between gap-2">
-                        <div class="flex items-center gap-2 flex-1">
-                          <span class="w-6 h-6 rounded-full bg-teal-600 text-white text-xs font-bold flex items-center justify-center">${['①', '②', '③', '④', '⑤'][idx] || (idx + 1)}</span>
-                          <select data-fk="recv40-${idx}" class="field-input text-xs font-bold py-1.5 max-w-[210px]" onchange="updateReceive40Tank(${idx}, this.value)">
-                            ${b111Tanks.map((t) => {
-            const held = appState.holdTanks[t.id]?.held;
-            return `<option value="${t.id}" ${t.id === tid ? 'selected' : ''}>${t.id} (ยกมา ${fmtNum(recon.tankRows[t.id]?.opening || 0)} L)${held ? ' [Hold-ข้าม]' : ''}</option>`;
-          }).join('')}
-                          </select>
-                          <span class="badge-single-line px-2 py-0.5 rounded-full text-[10px] font-bold ${isLast ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'}">
-                            ${isLast ? 'ถังสุดท้ายของวัน (เทียบยอดเท)' : 'เติมเต็มความจุถัง'}
-                          </span>
-                        </div>
-                        <button type="button" onclick="removeReceive40Tank(${idx})" class="p-1 text-rose-600 hover:bg-rose-50 rounded"><i data-lucide="x" class="w-4 h-4"></i></button>
-                      </div>
-                      <div class="grid grid-cols-4 gap-2 text-[11px] pt-1 border-t border-slate-200/70">
-                        <div>ยกมา: <b data-out="recv40-${idx}-opening">${fmtNum(tf.opening)}</b></div>
-                        <div>จ่ายบรรจุ: <b data-out="recv40-${idx}-out" class="text-blue-700">${fmtNum(tf.outBottling)}</b></div>
-                        <div>รับปรุงสุทธิ: <b data-out="recv40-${idx}-net" class="text-teal-700">+${fmtNum(tf.netReceive)}</b></div>
-                        <div class="text-right">คงเหลือ: <b data-out="recv40-${idx}-ending" class="${tf.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">${fmtNum(tf.ending)} L</b></div>
-                      </div>
-                    </div>
-                  `;
+                `;
         }).join('')}
-              </div>
-
-              <!-- Quick Hold Switcher for Building 110 & 111 -->
-              <div class="pt-2 border-t border-slate-200">
-                <div class="text-[11px] font-bold text-slate-600 mb-1.5">ถังที่ติดสถานะ Hold (ข้ามไม่นำมาใช้ตาม FIFO เพราะค่าไม่ปกติ/รอบ่ม):</div>
-                <div class="flex flex-wrap gap-1.5">
-                  ${Object.entries(appState.holdTanks).filter(([, v]) => v?.held).map(([tid, v]) => `
-                    <button type="button" onclick="openTankDetailModal('${escHtml(tid)}')" class="badge-single-line gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200 hover:bg-rose-200">
-                      <i data-lucide="pause-circle" class="w-3 h-3"></i> ${escHtml(tid)}: ${escHtml(v.reason || 'Hold')}
-                    </button>
-                  `).join('') || `<span class="text-xs text-slate-400">ไม่มีถังที่ติด Hold · คลิกที่การ์ดถังใดก็ได้เพื่อตั้ง Hold</span>`}
-                </div>
-              </div>
             </div>
           </div>
 
@@ -5413,30 +5656,30 @@
           </div>
         </div>
 
-        <!-- STEP 4 -> SECTION 2.4: MULTI-TANK DISTILLATION (D1-D4 WITH MANUAL PER-TANK AMOUNT & OVERFLOW) & 70° TRANSFERS -->
+        <!-- STEP 4: MULTI-TANK DISTILLATION (D1-D4 WITH MANUAL PER-TANK AMOUNT & OVERFLOW) & 70° TRANSFERS -->
         <div id="form-step-4" class="liquid-glass rounded-3xl p-5 sm:p-6 space-y-5 ${stepCls(4)}">
           <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/80">
             <div class="flex items-center gap-2.5">
-              <div class="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold text-sm">2.4</div>
+              <div class="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-extrabold text-base">4</div>
               <div>
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900">ขั้นที่ 4</span>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900">ข้อ 4</span>
                   <h3 class="text-base sm:text-lg font-bold text-slate-900">รับสุรากลั่น 70° (D1–D4) แบบเลือกรับลงถังล้นถัดไปได้ &amp; โอนน้ำสุรา 70° โรงบ่ม → อาคาร 110</h3>
                 </div>
                 <p class="text-xs text-slate-500">เลือกถังรับกลั่นในโรงบ่มได้หลายถัง (กรณีถังแรกเต็มแล้วล้นไปถังถัดไป) และกรอกยอดรับเองของทุกถังที่เลือกได้</p>
               </div>
             </div>
-            <span data-out="dist-total-badge" class="px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-bold">รวมรับกลั่น D1–D4: ${fmtNum(recon.distTotal)} L</span>
+            <span data-out="dist-total-badge" class="px-3 py-1 rounded-full bg-[#E4EFE8] text-[#134E39] border border-[#1F8A65]/40 text-xs font-bold">รวมรับกลั่น D1–D4 (อัตโนมัติ): ${fmtNum(recon.distTotal)} L</span>
           </div>
           <div class="text-[11px] px-3 py-1.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900">
-            <b>Hint ขั้นที่ 4:</b> กรอกยอดรับกลั่น D1–D4 เพื่อนำเข้าถังโรงบ่ม และโอน 70° จากโรงบ่ม → อาคาร 110 (เติมถังที่ใช้ปรุงในขั้นที่ 3 ให้ไม่ต่ำกว่า 20,000.00 L)
+            <b>Hint ข้อ 4:</b> กรอกยอดรับกลั่น <b>4.1</b> (D1–D4) เพื่อนำเข้าถังโรงบ่ม และทำรายการ <b>4.2</b> โอน 70° จากโรงบ่ม → อาคาร 110 (เติมถังที่ใช้ปรุงในข้อ 3 ให้ไม่ต่ำกว่า 20,000.00 L)
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 resp-2col-grid">
-            <!-- Distillation D1-D4 + Molasses Supplier + Multi-Tank Overflow Receivers -->
+            <!-- 4.1 Distillation D1-D4 + Molasses Supplier + Multi-Tank Overflow Receivers -->
             <div class="rounded-2xl bg-[#FFFDF7] border border-[#1B3B2B]/15 p-4 space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="text-sm font-bold text-[#1B3B2B]">รับกลั่น 70° จากหน่วยกลั่น (D1–D4 · ถังรับ 109/1–109/4)</div>
+                <div class="text-sm font-bold text-[#1B3B2B]">4.1 รับกลั่น 70° จากหน่วยกลั่น (D1–D4 · ถังรับ 109/1–109/4)</div>
                 <span class="contents" data-out="dist-total-badge2">${renderSpiritBadge('สุราขาว 70 ดีกรี', 70, `รวม D1–D4: ${fmtNum(recon.distTotal)} L`)}</span>
               </div>
 
@@ -5479,7 +5722,7 @@
                 ${['d1', 'd2', 'd3', 'd4'].map((k, i) => `
                   <div>
                     <label class="block text-[11px] font-bold text-slate-600 mb-1">D${i + 1} (109/${i + 1}) (L)</label>
-                    <input data-fk="dist-${k}" type="number" step="0.01" class="field-input text-xs font-bold"
+                    <input data-fk="dist-${k}" type="number" min="0" step="0.01" class="field-input text-xs font-bold"
                       value="${day.distillation[k]}"
                       oninput="updateDistillationField('${k}', this.value)" />
                   </div>
@@ -5508,6 +5751,7 @@
           const tRow = recon.tankRows[dt.tankId] || { opening: 0, workingVol: 620000, ending: 0, colI: 0 };
           const availBeforeReceive = Math.max(0, tRow.workingVol - (tRow.opening - tRow.colI));
           const isOverCap = tRow.ending > tRow.workingVol;
+          const isDistSynced = idx === 0 && distTargets.length === 1 && Math.abs((Number(dt.amount) || 0) - recon.distTotal) < 0.05;
           return `
                       <div class="p-3 rounded-xl border ${isOverCap ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-slate-50/80'} space-y-2">
                         <div class="grid grid-cols-12 gap-2 items-center">
@@ -5524,8 +5768,11 @@
                             </select>
                           </div>
                           <div class="col-span-5">
-                            <label class="block text-[10px] font-bold text-amber-800">ยอดรับลงถังนี้ (L) · ใส่ยอดเองได้</label>
-                            <input data-fk="distTgt-${idx}-amount" type="number" step="0.01" class="field-input text-xs font-bold text-right text-amber-900 py-1.5"
+                            <label class="flex flex-wrap items-center gap-1 text-[10px] font-bold text-amber-800">
+                              <span>ยอดรับลงถังนี้ (L)</span>
+                              ${idx === 0 ? `<span data-out="distTgt-0-auto-pill" class="${isDistSynced ? '' : 'hidden '}badge-auto-edit">ซิงค์ D1–D4 · แก้ได้</span>` : ''}
+                            </label>
+                            <input data-fk="distTgt-${idx}-amount" type="number" min="0" step="0.01" class="field-input text-xs font-bold text-right py-1.5 ${isDistSynced ? 'field-auto-editable' : 'text-amber-900'}"
                               value="${Number(dt.amount) || 0}"
                               oninput="updateDistillationTargetRow(${idx}, 'amount', this.value)" />
                           </div>
@@ -5537,8 +5784,8 @@
                             ` : ''}
                           </div>
                         </div>
-                        <div data-out="distTgt-${idx}-stats" class="flex flex-wrap items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-slate-200/70">
-                          <span>ยกมา: <b>${fmtNum(tRow.opening)} L</b> · ว่างรับได้: <b class="text-blue-700">${fmtNum(availBeforeReceive)} L</b></span>
+                        <div data-out="distTgt-${idx}-stats" class="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-700 px-2.5 py-1.5 rounded-lg bg-[#E4EFE8]/70 border border-[#1F8A65]/30">
+                          <span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ยกมา: <b>${fmtNum(tRow.opening)} L</b> · ว่างรับได้: <b class="text-blue-700">${fmtNum(availBeforeReceive)} L</b></span>
                           <span class="font-bold ${isOverCap ? 'text-rose-600' : 'text-emerald-700'}">
                             คงเหลือหลังรับ: ${fmtNum(tRow.ending)} / ${fmtNum(tRow.workingVol)} L ${isOverCap ? '⚠️ เกินความจุถัง!' : ''}
                           </span>
@@ -5551,6 +5798,7 @@
                 <!-- Reconciliation Check Banner for D1..D4 vs Sum of Selected Tanks -->
                 <div data-out="dist-recon-banner" class="p-3 rounded-xl border ${Math.abs(distAllocDiff) < 0.01 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-900'} flex flex-wrap items-center justify-between gap-2 text-xs">
                   <div>
+                    <span class="badge-auto-ro mr-1">ตรวจสอบอัตโนมัติ</span>
                     <span class="font-bold">รวมยอดที่ใส่ในถังรับกลั่น (${distTargets.length} ถัง): ${fmtNum(recon.distAllocatedTotal)} L</span>
                     <span class="mx-1.5">เทียบกับ</span>
                     <span>รวม D1–D4: <b>${fmtNum(recon.distTotal)} L</b></span>
@@ -5564,10 +5812,10 @@
               </div>
             </div>
 
-            <!-- 70° Transfers Aging -> Building 110 -->
+            <!-- 4.2 70° Transfers Aging -> Building 110 -->
             <div class="rounded-2xl bg-white/95 border border-slate-200 p-4 space-y-3">
               <div class="flex items-center justify-between">
-                <div class="text-sm font-bold text-slate-900">โอนน้ำสุรา 70° จากโรงบ่ม → อาคาร 110</div>
+                <div class="text-sm font-bold text-slate-900">4.2 โอนน้ำสุรา 70° จากโรงบ่ม → อาคาร 110</div>
                 <button type="button" onclick="addTransfer70Row()" class="btn-pill bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 text-xs">
                   <i data-lucide="plus" class="w-3.5 h-3.5"></i> เพิ่มรายการโอน
                 </button>
@@ -5592,7 +5840,7 @@
                     </div>
                     <div class="col-span-3">
                       <label class="block text-[10px] font-bold text-slate-500">ปริมาณโอน (L)</label>
-                      <input data-fk="tr70-${idx}-amount" type="number" step="0.01" class="field-input text-xs font-bold py-1" value="${tr.amount}"
+                      <input data-fk="tr70-${idx}-amount" type="number" min="0" step="0.01" class="field-input text-xs font-bold py-1" value="${tr.amount}"
                         oninput="updateTransfer70Row(${idx}, 'amount', this.value)" />
                     </div>
                     <div class="col-span-2">
@@ -5603,8 +5851,8 @@
                     <div class="col-span-1 text-right pt-3">
                       <button type="button" onclick="removeTransfer70Row(${idx})" class="p-1 text-rose-600 hover:bg-rose-50 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                     </div>
-                    <div data-out="tr70-${idx}-stats" class="col-span-12 flex flex-wrap justify-between text-[10px] text-slate-600 pt-1 border-t border-slate-200/60">
-                      <span>ต้นทาง ${escHtml(tr.fromTankId)}: เหลือ <b class="${fromRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">${fmtNum(fromRow.ending)} L</b></span>
+                    <div data-out="tr70-${idx}-stats" class="col-span-12 flex flex-wrap justify-between items-center gap-1 text-[10px] text-slate-700 px-2 py-1 rounded-lg bg-[#E4EFE8]/70 border border-[#1F8A65]/30">
+                      <span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ต้นทาง ${escHtml(tr.fromTankId)}: เหลือ <b class="${fromRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">${fmtNum(fromRow.ending)} L</b></span>
                       <span>ปลายทาง ${escHtml(tr.toTankId)}: เหลือ <b class="${toRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">${fmtNum(toRow.ending)}</b> / ${fmtNum(toRow.workingVol || 100000)} L</span>
                     </div>
                   </div>
@@ -5653,19 +5901,38 @@
         }
       };
 
-      // 2.2 Dispatch to Bottling
+      // Update Step completion badges in Guided Flow Path
+      const stepDoneMap = {
+        1: (day.dispatchesToBottling || []).some((dp) => (Number(dp.toPrep1) || 0) + (Number(dp.toPrep2) || 0) > 0),
+        2: (Number(day.bottling?.prep1?.discharge) || 0) > 0 || (Number(day.bottling?.prep2?.discharge) || 0) > 0,
+        3: bp.N > 0 && (day.blending.receivingTanks40 || []).length > 0 && (day.blending.sourceTanks70 || []).length > 0,
+        4: recon.distTotal > 0 || (day.transfers70 || []).length > 0
+      };
+      const firstInc = !stepDoneMap[1] ? 1 : (!stepDoneMap[2] ? 2 : (!stepDoneMap[3] ? 3 : (!stepDoneMap[4] ? 4 : 0)));
+      const curActiveStep = appState.activeFormStep || firstInc || 1;
+      [1, 2, 3, 4].forEach((sn) => {
+        const bEl = formEl.querySelector(`[data-step-badge="${sn}"]`);
+        if (bEl) {
+          const isAct = curActiveStep === sn;
+          const isDone = stepDoneMap[sn];
+          bEl.className = `w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0 ${isAct ? 'bg-[#FF3EA5] text-white' : (isDone ? 'bg-[#1F8A65] text-white' : 'bg-slate-200 text-slate-700')}`;
+          bEl.textContent = (isDone && !isAct) ? '✓' : String(sn);
+        }
+      });
+
+      // Step 1: Dispatch to Bottling
       const dispatches = day.dispatchesToBottling || [];
       const sumDispatchPrep1 = dispatches.reduce((s, d) => s + (Number(d.toPrep1) || 0), 0);
       const sumDispatchPrep2 = dispatches.reduce((s, d) => s + (Number(d.toPrep2) || 0), 0);
       dispatches.forEach((dp, idx) => {
-        const tRow = recon.tankRows[dp.tankId] || { opening: 0, ending: 0, receiveBlend: 0, colE: 0, colF: 0, colI: 0 };
+        const tRow = recon.tankRows[dp.tankId] || { opening: 0, ending: 0, colE: 0, colF: 0, colI: 0 };
         const rowSum = (Number(dp.toPrep1) || 0) + (Number(dp.toPrep2) || 0);
         setText(`dp-${idx}-opening`, fmtNum(tRow.opening));
         setText(`dp-${idx}-rowSum`, fmtNum(rowSum));
         const endCell = formEl.querySelector(`[data-out="dp-${idx}-ending"]`);
         if (endCell) {
-          endCell.className = `py-2 px-2 text-right font-bold tabular-nums ${tRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}`;
-          endCell.innerHTML = `${fmtNum(tRow.ending)}${tRow.receiveBlend > 0 || tRow.colE > 0 ? `<div class="text-[10px] text-teal-600">(รวมรับปรุง +${fmtNum(tRow.colE + tRow.colF - tRow.colI)})</div>` : ''}`;
+          endCell.className = `py-2 px-2 text-right font-bold tabular-nums td-auto-calc ${tRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}`;
+          endCell.innerHTML = `${fmtNum(tRow.ending)}${(tRow.colE + tRow.colF - tRow.colI) > 0.001 ? `<div class="text-[10px] text-teal-600">(รวมรับปรุง +${fmtNum(tRow.colE + tRow.colF - tRow.colI)})</div>` : ''}`;
         }
         if (patchSelects) {
           setSelectTexts(`dp-${idx}-tankId`, (tid) => {
@@ -5679,7 +5946,7 @@
       setText('dp-sumAll', `${fmtNum(sumDispatchPrep1 + sumDispatchPrep2)} L`);
       setText('s111-ending', `${fmtNum(recon.summary111.ending)} L`);
 
-      // 2.1 Bottling
+      // Step 2: Bottling
       setHtml('s113-badge', renderSpiritBadge('สุราขาว 40 ดีกรี', 40, `รวมคงเหลือ อ.113: ${fmtNum(recon.summary113.ending)} L`));
       [
         { key: 'prep1', tid: 'เตรียม 1/113', dispatchSum: sumDispatchPrep1 },
@@ -5693,15 +5960,19 @@
           setReadonlyVal(`bot-${item.key}-ending`, fmtNum(row.ending));
           setHtml(`bot-${item.key}-badges`, row.badges.map((b) => getBadgeHtml(b, row.degree, row.spiritType)).join(''));
         }
+        const mismatch = Math.abs((Number(data.receive) || 0) - item.dispatchSum) > 0.01;
         const hintEl = formEl.querySelector(`[data-out="bot-${item.key}-sync-hint"]`);
         if (hintEl) {
-          const mismatch = Math.abs((Number(data.receive) || 0) - item.dispatchSum) > 0.01;
           hintEl.classList.toggle('hidden', !mismatch);
-          if (mismatch) hintEl.textContent = `ยอดส่งจาก 2.2 = ${fmtNum(item.dispatchSum)} L`;
+          if (mismatch) hintEl.textContent = `ยอดส่งจากข้อ 1 = ${fmtNum(item.dispatchSum)} L`;
         }
+        const autoPill = formEl.querySelector(`[data-out="bot-${item.key}-auto-pill"]`);
+        if (autoPill) autoPill.classList.toggle('hidden', mismatch);
+        const recInput = formEl.querySelector(`[data-fk="bot-${item.key}-receive"]`);
+        if (recInput) recInput.classList.toggle('field-auto-editable', !mismatch);
       });
 
-      // 2.3 Blending (3.1 - 3.5)
+      // Step 3: Blending (3.1 - 3.6)
       const unit = day.blending?.volInputUnit === 'te' ? 'te' : 'L';
       const disp70 = unit === 'te' ? Number((bp.activeVol70 / 20).toFixed(4)) : bp.activeVol70;
       const disp40 = unit === 'te' ? Number((bp.activeVol40 / 20).toFixed(4)) : bp.activeVol40;
@@ -5711,37 +5982,57 @@
         renderSpiritBadge('สุราขาว 70 ดีกรี', 70, `ใช้สุรา 70° รวม: ${fmtNum(bp.total70)} L`)
       );
       setFkVal('bl-startBatchNo', day.blending.startBatchNo);
+      const startInp = formEl.querySelector('[data-fk="bl-startBatchNo"]');
+      if (startInp) startInp.classList.toggle('field-auto-editable', !day.blending.startBatchNoManual);
+      const batchAutoPill = formEl.querySelector('[data-out="bl-batch-auto-pill"]');
+      if (batchAutoPill) batchAutoPill.classList.toggle('hidden', Boolean(day.blending.startBatchNoManual));
       const resetBatchEl = formEl.querySelector('[data-out="bl-batch-reset"]');
       if (resetBatchEl) resetBatchEl.classList.toggle('hidden', !day.blending.startBatchNoManual);
       setHtml('bl-batch-range', `ช่วงวันนี้: <b>${bp.N > 0 ? `${day.blending.startBatchNo} – ${Number(day.blending.startBatchNo) + bp.N - 1}` : '-'}</b> · ${day.blending.startBatchNoManual ? 'กำหนดเอง' : 'ไล่ต่อเนื่องจากวันก่อนอัตโนมัติ'}`);
 
       setFkVal('bl-gaugeTe', bp.isGaugeAuto ? bp.estimatedGaugeTe : day.blending.lastTankGaugeTe);
+      const gaugeInp = formEl.querySelector('[data-fk="bl-gaugeTe"]');
+      if (gaugeInp) {
+        gaugeInp.classList.toggle('field-auto-editable', bp.isGaugeAuto);
+      }
       setHtml('bl-gauge-auto-pill', bp.isGaugeAuto
-        ? `<span class="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">คาดการณ์อัตโนมัติ</span>`
+        ? `<span class="badge-auto-edit">คาดการณ์อัตโนมัติ · แก้ได้</span>`
         : `<button type="button" onclick="resetLastTankGaugeAuto()" class="text-[10px] font-bold text-teal-700 hover:underline">คำนวณอัตโนมัติ (~${fmtInt(bp.estimatedGaugeTe)})</button>`
       );
-      setHtml('bl-gauge-hint', `ใช้ในสูตร: (${fmtNum(bp.gaugeTe)} − ${fmtNum(bp.lastBaseTe)}) × 20 = <b>${fmtNum(bp.approxNetLast)} L</b>${bp.isGaugeAuto ? ` · เรียนรู้เฉลี่ย ${fmtInt(bp.learnedAvg40)} L/ถัง` : ''}`);
+      setHtml('bl-gauge-hint', `<span class="badge-auto-ro mr-1">อัตโนมัติ</span> ใช้ในสูตร: (${fmtNum(bp.gaugeTe)} − ${fmtNum(bp.lastBaseTe)}) × 20 = <b>${fmtNum(bp.approxNetLast)} L</b>${bp.isGaugeAuto ? ` · เรียนรู้เฉลี่ย ${fmtInt(bp.learnedAvg40)} L/ถัง` : ''}`);
 
       const modeEl = formEl.querySelector('[data-out="bl-mode-badge"]');
       if (modeEl) {
-        modeEl.className = `px-1.5 py-0.5 rounded text-[10px] font-bold ${bp.isManualOverride ? 'bg-amber-100 text-amber-800' : 'bg-teal-100 text-teal-800'}`;
-        modeEl.textContent = bp.isManualOverride ? 'กำหนดเอง' : 'อัตโนมัติ';
+        modeEl.className = bp.isManualOverride ? 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800' : 'badge-auto-edit';
+        modeEl.textContent = bp.isManualOverride ? 'กำหนดเอง' : 'คำนวณอัตโนมัติ · แก้ได้';
       }
       const resetVolEl = formEl.querySelector('[data-out="bl-reset-btn"]');
       if (resetVolEl) resetVolEl.classList.toggle('hidden', !bp.isManualOverride);
 
       setFkVal('bl-vol70', disp70);
       setFkVal('bl-vol40', disp40);
+      const v70Inp = formEl.querySelector('[data-fk="bl-vol70"]');
+      const v40Inp = formEl.querySelector('[data-fk="bl-vol40"]');
+      if (v70Inp) v70Inp.classList.toggle('field-auto-editable', !bp.isManualOverride);
+      if (v40Inp) v40Inp.classList.toggle('field-auto-editable', !bp.isManualOverride);
       setText('bl-conv70', `= ${unit === 'te' ? `${fmtNum(bp.activeVol70)} L` : `${fmtNum(bp.activeVol70 / 20)} เท`}`);
       setText('bl-conv40', `= ${unit === 'te' ? `${fmtNum(bp.activeVol40)} L` : `${fmtNum(bp.activeVol40 / 20)} เท`}`);
-      setHtml('bl-auto-hint', `<span>ดิบ: ${bp.avg40Raw ? bp.avg40Raw.toFixed(2) : '0.00'} → อัตโนมัติ (±6): <b>${fmtInt(bp.autoVol70)}</b> / <b>${fmtInt(bp.autoVol40)} L</b></span>${Math.abs(bp.activeVol70 - Math.round(bp.activeVol70)) > 0.0001 ? '<span class="text-rose-700 font-bold">70° มีทศนิยม</span>' : ''}`);
+      setHtml('bl-auto-hint', `<span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ดิบ: ${bp.avg40Raw ? bp.avg40Raw.toFixed(2) : '0.00'} → ลงตัว (±6): <b>${fmtInt(bp.autoVol70)}</b> / <b>${fmtInt(bp.autoVol40)} L</b></span>${Math.abs(bp.activeVol70 - Math.round(bp.activeVol70)) > 0.0001 ? '<span class="text-rose-700 font-bold">70° มีทศนิยม</span>' : ''}`);
 
-      // 3.5 Source 70° tanks
+      // 3.6 Source 70° tanks
+      const sumSrcBatches = (day.blending.sourceTanks70 || []).reduce((acc, s) => acc + (parseInt(s.batches, 10) || 0), 0);
+      const srcBatchDiff = sumSrcBatches - bp.N;
+      const srcHintEl = formEl.querySelector('[data-out="src70-sum-hint"]');
+      if (srcHintEl) {
+        srcHintEl.className = `badge-single-line px-2 py-0.5 rounded-full text-[10px] font-bold border ${srcBatchDiff === 0 ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300'}`;
+        srcHintEl.textContent = srcBatchDiff === 0 ? `✓ ครบ ${bp.N} ถังปรุงตามข้อ 3.1` : `⚠️ รวม ${sumSrcBatches} ถัง (ข้อ 3.1 = ${bp.N} ถัง)`;
+      }
       (day.blending.sourceTanks70 || []).forEach((s, idx) => {
         const tRow = recon.tankRows[s.tankId] || { opening: 0, colF: 0, colG: 0, ending: 0 };
         const below20k = tRow.ending < 20000;
+        setFkVal(`src70-${idx}-batches`, s.batches);
         setText(`src70-${idx}-colG`, `${fmtNum(tRow.colG)} L`);
-        setHtml(`src70-${idx}-meta`, `ยกมา: <b>${fmtNum(tRow.opening)} L</b> ${tRow.colF > 0 ? `· รับโอนวันนี้: <b class="text-cyan-700">+${fmtNum(tRow.colF)} L</b>` : ''}`);
+        setHtml(`src70-${idx}-meta`, `<span class="badge-auto-ro mr-1">อัตโนมัติ</span> ยกมา: <b>${fmtNum(tRow.opening)} L</b> ${tRow.colF > 0 ? `· รับโอนวันนี้: <b class="text-cyan-700">+${fmtNum(tRow.colF)} L</b>` : ''}`);
         const endEl = formEl.querySelector(`[data-out="src70-${idx}-ending"]`);
         if (endEl) {
           endEl.className = `font-bold ${below20k ? 'text-rose-600' : 'text-emerald-700'}`;
@@ -5755,7 +6046,7 @@
         }
       });
 
-      // 3.2 Receiving 40° tanks
+      // 3.3 Receiving 40° tanks
       (day.blending.receivingTanks40 || []).forEach((tid, idx) => {
         const tf = bp.tankFlow[tid] || { opening: 0, outBottling: 0, netReceive: 0, ending: 0 };
         setText(`recv40-${idx}-opening`, fmtNum(tf.opening));
@@ -5774,7 +6065,7 @@
         }
       });
 
-      // 3.6 & Image 2 Summary Tables
+      // 3.7 & 3.8 Summary Tables
       const wrap = document.getElementById('form-blending-tables-wrap');
       if (rebuildBlendingTables && wrap && !wrap.contains(activeEl)) {
         wrap.innerHTML = renderBlendingTablesHtml(recon);
@@ -5782,6 +6073,9 @@
           try { window.lucide.createIcons(); } catch (e) { }
         }
       } else {
+        (bp.batches || []).forEach((b, idx) => {
+          setText(`batch-${idx}-blendingId`, `(${b.blendingId})`);
+        });
         const sumLine = formEl.querySelector('[data-out="bl-matdoc-summary-line"]');
         if (sumLine) {
           const hasSum = (bp.agingTankSummaries || []).length > 0;
@@ -5792,18 +6086,25 @@
         }
       }
 
-      // 2.4 Distillation & Transfers
-      setText('dist-total-badge', `รวมรับกลั่น D1–D4: ${fmtNum(recon.distTotal)} L`);
+      // Step 4: Distillation & Transfers
+      setText('dist-total-badge', `รวมรับกลั่น D1–D4 (อัตโนมัติ): ${fmtNum(recon.distTotal)} L`);
       setHtml('dist-total-badge2', renderSpiritBadge('สุราขาว 70 ดีกรี', 70, `รวม D1–D4: ${fmtNum(recon.distTotal)} L`));
       const distTargets = normalizeDistillationTargets(day.distillation);
       const distAllocDiff = recon.distAllocatedTotal - recon.distTotal;
       distTargets.forEach((dt, idx) => {
         setFkVal(`distTgt-${idx}-amount`, Number(dt.amount) || 0);
+        const isDistSynced = idx === 0 && distTargets.length === 1 && Math.abs((Number(dt.amount) || 0) - recon.distTotal) < 0.05;
+        const distAmtInp = formEl.querySelector(`[data-fk="distTgt-${idx}-amount"]`);
+        if (distAmtInp) distAmtInp.classList.toggle('field-auto-editable', isDistSynced);
+        if (idx === 0) {
+          const distAutoPill = formEl.querySelector('[data-out="distTgt-0-auto-pill"]');
+          if (distAutoPill) distAutoPill.classList.toggle('hidden', !isDistSynced);
+        }
         const tRow = recon.tankRows[dt.tankId] || { opening: 0, workingVol: 620000, ending: 0, colI: 0 };
         const availBeforeReceive = Math.max(0, tRow.workingVol - (tRow.opening - tRow.colI));
         const isOverCap = tRow.ending > tRow.workingVol;
         setHtml(`distTgt-${idx}-stats`,
-          `<span>ยกมา: <b>${fmtNum(tRow.opening)} L</b> · ว่างรับได้: <b class="text-blue-700">${fmtNum(availBeforeReceive)} L</b></span>` +
+          `<span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ยกมา: <b>${fmtNum(tRow.opening)} L</b> · ว่างรับได้: <b class="text-blue-700">${fmtNum(availBeforeReceive)} L</b></span>` +
           `<span class="font-bold ${isOverCap ? 'text-rose-600' : 'text-emerald-700'}">คงเหลือหลังรับ: ${fmtNum(tRow.ending)} / ${fmtNum(tRow.workingVol)} L ${isOverCap ? '⚠️ เกินความจุถัง!' : ''}</span>`
         );
         if (patchSelects) {
@@ -5817,14 +6118,14 @@
       const distBanner = formEl.querySelector('[data-out="dist-recon-banner"]');
       if (distBanner) {
         distBanner.className = `p-3 rounded-xl border ${Math.abs(distAllocDiff) < 0.01 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-900'} flex flex-wrap items-center justify-between gap-2 text-xs`;
-        distBanner.innerHTML = `<div><span class="font-bold">รวมยอดที่ใส่ในถังรับกลั่น (${distTargets.length} ถัง): ${fmtNum(recon.distAllocatedTotal)} L</span><span class="mx-1.5">เทียบกับ</span><span>รวม D1–D4: <b>${fmtNum(recon.distTotal)} L</b></span></div><div class="font-bold">${Math.abs(distAllocDiff) < 0.01 ? '<span class="text-emerald-700">✓ ยอดตรงกันพอดี (0.00 L)</span>' : `<span class="text-rose-700">ผลต่าง: ${distAllocDiff > 0 ? '+' : ''}${fmtNum(distAllocDiff)} L</span>`}</div>`;
+        distBanner.innerHTML = `<div><span class="badge-auto-ro mr-1">ตรวจสอบอัตโนมัติ</span><span class="font-bold">รวมยอดที่ใส่ในถังรับกลั่น (${distTargets.length} ถัง): ${fmtNum(recon.distAllocatedTotal)} L</span><span class="mx-1.5">เทียบกับ</span><span>รวม D1–D4: <b>${fmtNum(recon.distTotal)} L</b></span></div><div class="font-bold">${Math.abs(distAllocDiff) < 0.01 ? '<span class="text-emerald-700">✓ ยอดตรงกันพอดี (0.00 L)</span>' : `<span class="text-rose-700">ผลต่าง: ${distAllocDiff > 0 ? '+' : ''}${fmtNum(distAllocDiff)} L</span>`}</div>`;
       }
 
       (day.transfers70 || []).forEach((tr, idx) => {
         const fromRow = recon.tankRows[tr.fromTankId] || { ending: 0 };
         const toRow = recon.tankRows[tr.toTankId] || { ending: 0, workingVol: 100000 };
         setHtml(`tr70-${idx}-stats`,
-          `<span>ต้นทาง ${escHtml(tr.fromTankId)}: เหลือ <b class="${fromRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">${fmtNum(fromRow.ending)} L</b></span>` +
+          `<span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ต้นทาง ${escHtml(tr.fromTankId)}: เหลือ <b class="${fromRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">${fmtNum(fromRow.ending)} L</b></span>` +
           `<span>ปลายทาง ${escHtml(tr.toTankId)}: เหลือ <b class="${toRow.ending < 20000 ? 'text-rose-600' : 'text-emerald-700'}">${fmtNum(toRow.ending)}</b> / ${fmtNum(toRow.workingVol || 100000)} L</span>`
         );
         if (patchSelects) {
@@ -5907,6 +6208,7 @@
       if (!day?.blending) return;
       day.blending.lastTankGaugeTe = 1000;
       day.blending.lastTankGaugeTeManual = false;
+      day.blending.calcMode = 'formula';
       day.blending.customVol40 = null;
       day.blending.customVol70 = null;
       patchFormCalculatedOutputs({ rebuildBlendingTables: true });
@@ -5915,7 +6217,7 @@
     function updateBottlingField(prepKey, field, val) {
       const day = appState.days[appState.activeDate];
       if (!day.bottling[prepKey]) day.bottling[prepKey] = {};
-      day.bottling[prepKey][field] = field === 'sapOrder' ? val : (parseFloat(val) || 0);
+      day.bottling[prepKey][field] = field === 'sapOrder' ? val : Math.max(0, parseFloat(val) || 0);
       patchFormCalculatedOutputs({ rebuildBlendingTables: false });
     }
 
@@ -5935,10 +6237,13 @@
       const row = day.dispatchesToBottling[idx];
       if (!row) return;
       if (field === 'toPrep1' || field === 'toPrep2') {
-        row[field] = parseFloat(val) || 0;
+        row[field] = Math.max(0, parseFloat(val) || 0);
         day.bottling.prep1.receive = (day.dispatchesToBottling || []).reduce((s, d) => s + (Number(d.toPrep1) || 0), 0);
         day.bottling.prep2.receive = (day.dispatchesToBottling || []).reduce((s, d) => s + (Number(d.toPrep2) || 0), 0);
       } else {
+        if (field === 'tankId' && appState.holdTanks[val]?.held) {
+          showToast(`ถัง ${val} ติดสถานะ Hold`, 'กรุณาข้ามถังนี้หรือปลด Hold ก่อนนำมาใช้งาน', 'warning');
+        }
         row[field] = val;
       }
       const affectsCalc = field === 'toPrep1' || field === 'toPrep2' || field === 'tankId';
@@ -5947,6 +6252,7 @@
 
     function addDispatchRow() {
       const day = appState.days[appState.activeDate];
+      if (!Array.isArray(day.dispatchesToBottling)) day.dispatchesToBottling = [];
       const sug = getNextDispatchTankSuggestion(appState.activeDate);
       day.dispatchesToBottling.push({ tankId: sug.tankId, lineCode: sug.lineCode, toPrep1: 0, toPrep2: 0, sapOrder1: '', sapOrder2: '' });
       scheduleFormRefresh(true);
@@ -6003,9 +6309,10 @@
           day.blending.lastTankGaugeTe = 1000;
           day.blending.lastTankGaugeTeManual = false;
         } else {
-          day.blending.lastTankGaugeTe = parseFloat(trimmed) || 0;
+          day.blending.lastTankGaugeTe = Math.max(0, parseFloat(trimmed) || 0);
           day.blending.lastTankGaugeTeManual = true;
         }
+        day.blending.calcMode = 'formula';
         day.blending.customVol40 = null;
         day.blending.customVol70 = null;
         patchFormCalculatedOutputs({ rebuildBlendingTables: true });
@@ -6044,6 +6351,7 @@
     function resetCustomBlendingVol() {
       const day = appState.days[appState.activeDate];
       if (!day.blending) return;
+      day.blending.calcMode = 'formula';
       day.blending.customVol40 = null;
       day.blending.customVol70 = null;
       patchFormCalculatedOutputs({ rebuildBlendingTables: true });
@@ -6068,12 +6376,20 @@
       const day = appState.days[appState.activeDate];
       const row = day.blending.sourceTanks70[idx];
       if (!row) return;
-      row[field] = field === 'batches' ? (parseInt(val, 10) || 0) : val;
+      if (field === 'batches') {
+        row.batches = Math.max(0, Math.min(30, parseInt(val, 10) || 0));
+      } else {
+        if (field === 'tankId' && appState.holdTanks[val]?.held) {
+          showToast(`ถัง ${val} ติดสถานะ Hold`, 'กรุณาข้ามถังนี้หรือปลด Hold ก่อนนำมาใช้งาน', 'warning');
+        }
+        row[field] = val;
+      }
       patchFormCalculatedOutputs({ rebuildBlendingTables: true, patchSelects: field === 'tankId' });
     }
 
     function addSource70Row() {
       const day = appState.days[appState.activeDate];
+      if (!Array.isArray(day.blending.sourceTanks70)) day.blending.sourceTanks70 = [];
       const nextTid = getNextSource70TankSuggestion(appState.activeDate);
       day.blending.sourceTanks70.push({ tankId: nextTid, batches: 1 });
       scheduleFormRefresh(true);
@@ -6087,6 +6403,11 @@
 
     function updateReceive40Tank(idx, tankId) {
       const day = appState.days[appState.activeDate];
+      if ((day.blending.receivingTanks40 || []).some((tid, i) => i !== idx && tid === tankId)) {
+        showToast(`ถัง ${tankId} ถูกเลือกไว้แล้ว`, 'กรุณาเลือกถังเก็บบ่มอื่นที่ไม่ซ้ำกัน', 'warning');
+        scheduleFormRefresh(true);
+        return;
+      }
       if (appState.holdTanks[tankId]?.held) {
         showToast(`ถัง ${tankId} ติดสถานะ Hold`, 'กรุณาข้ามถังนี้หรือปลด Hold ก่อนนำมาใช้งาน', 'warning');
       }
@@ -6096,6 +6417,7 @@
 
     function addReceive40Tank() {
       const day = appState.days[appState.activeDate];
+      if (!Array.isArray(day.blending.receivingTanks40)) day.blending.receivingTanks40 = [];
       const nextTankId = getNextReceive40TankSuggestion(appState.activeDate);
       day.blending.receivingTanks40.push(nextTankId);
       scheduleFormRefresh(true);
@@ -6119,9 +6441,12 @@
         day.blending.blendingVessels[batchIdx] = val;
         scheduleFormRefresh(true);
       } else if (field === 'sapOrder') {
-        day.blending.sapOrders[batchIdx] = val.trim();
-        if (val.trim().length >= 5) {
-          day.blending.blendingIds[batchIdx] = val.trim().slice(-5);
+        const clean = val.trim();
+        day.blending.sapOrders[batchIdx] = clean;
+        if (clean.length >= 5) {
+          day.blending.blendingIds[batchIdx] = clean.slice(-5);
+        } else {
+          day.blending.blendingIds[batchIdx] = '';
         }
         patchFormCalculatedOutputs({ rebuildBlendingTables: false });
       } else if (field === 'matDoc') {
@@ -6163,7 +6488,7 @@
     function updateDistillationField(field, val) {
       const day = appState.days[appState.activeDate];
       const oldTotal = (Number(day.distillation.d1) || 0) + (Number(day.distillation.d2) || 0) + (Number(day.distillation.d3) || 0) + (Number(day.distillation.d4) || 0);
-      day.distillation[field] = parseFloat(val) || 0;
+      day.distillation[field] = Math.max(0, parseFloat(val) || 0);
       const newTotal = (Number(day.distillation.d1) || 0) + (Number(day.distillation.d2) || 0) + (Number(day.distillation.d3) || 0) + (Number(day.distillation.d4) || 0);
       day.distillation.targetTanks = normalizeDistillationTargets(day.distillation);
       // If only 1 receiving tank is selected and its amount previously matched oldTotal, keep it synced automatically
@@ -6299,9 +6624,12 @@
       const row = day.distillation.targetTanks[idx];
       if (!row) return;
       if (field === 'amount') {
-        row.amount = parseFloat(val) || 0;
+        row.amount = Math.max(0, parseFloat(val) || 0);
         patchFormCalculatedOutputs({ rebuildBlendingTables: false, patchSelects: true });
       } else {
+        if (appState.holdTanks[val]?.held) {
+          showToast(`ถัง ${val} ติดสถานะ Hold`, 'กรุณาข้ามถังนี้หรือปลด Hold ก่อนนำมาใช้งาน', 'warning');
+        }
         row.tankId = val;
         if (idx === 0) day.distillation.targetTankId = val;
         patchFormCalculatedOutputs({ rebuildBlendingTables: false, patchSelects: true });
@@ -6313,7 +6641,11 @@
       day.distillation.targetTanks = normalizeDistillationTargets(day.distillation);
       const recon = computeDayReconciliation(appState.activeDate);
       const used = new Set(day.distillation.targetTanks.map((t) => t.tankId));
-      const nextAging = MASTER_TANKS.find((t) => t.building === 'aging' && !used.has(t.id) && !appState.holdTanks[t.id]?.held);
+      const nextAging = MASTER_TANKS.find((t) => {
+        if (t.building !== 'aging' || used.has(t.id) || appState.holdTanks[t.id]?.held) return false;
+        const tr = recon.tankRows[t.id];
+        return tr && (tr.workingVol - (tr.opening - tr.colI)) > 0;
+      }) || MASTER_TANKS.find((t) => t.building === 'aging' && !used.has(t.id) && !appState.holdTanks[t.id]?.held);
       const remainingToAllocate = Math.max(0, Number((recon.distTotal - recon.distAllocatedTotal).toFixed(2)));
       day.distillation.targetTanks.push({
         tankId: nextAging ? nextAging.id : '640/7',
@@ -6342,6 +6674,7 @@
       // Fill existing selected tanks up to their available capacity before overflow
       for (let i = 0; i < day.distillation.targetTanks.length; i++) {
         const tid = day.distillation.targetTanks[i].tankId;
+        if (used.has(tid)) continue;
         used.add(tid);
         const tRow = recon.tankRows[tid];
         const avail = tRow ? Math.max(0, tRow.workingVol - (tRow.opening - tRow.colI)) : remaining;
@@ -6378,13 +6711,21 @@
       const day = appState.days[appState.activeDate];
       const row = day.transfers70[idx];
       if (!row) return;
-      row[field] = field === 'amount' ? (parseFloat(val) || 0) : val;
+      if (field === 'amount') {
+        row.amount = Math.max(0, parseFloat(val) || 0);
+      } else {
+        if ((field === 'fromTankId' || field === 'toTankId') && appState.holdTanks[val]?.held) {
+          showToast(`ถัง ${val} ติดสถานะ Hold`, 'กรุณาข้ามถังนี้หรือปลด Hold ก่อนนำมาใช้งาน', 'warning');
+        }
+        row[field] = val;
+      }
       const affects = field === 'amount' || field === 'fromTankId' || field === 'toTankId';
       patchFormCalculatedOutputs({ rebuildBlendingTables: affects, patchSelects: affects });
     }
 
     function addTransfer70Row() {
       const day = appState.days[appState.activeDate];
+      if (!Array.isArray(day.transfers70)) day.transfers70 = [];
       const sug = getNextTransfer70Suggestion(appState.activeDate);
       day.transfers70.push({ fromTankId: sug.fromTankId, toTankId: sug.toTankId, amount: 0, sapOrder: '' });
       scheduleFormRefresh(true);
@@ -6491,7 +6832,7 @@
                   ${tab.label}
                 </button>
               `).join('')}
-              <input type="text" placeholder="ค้นหาเลขถัง / SAP..." value="${escHtml(appState.rawSearch || '')}"
+              <input data-fk="raw-search" type="text" placeholder="ค้นหาเลขถัง / SAP..." value="${escHtml(appState.rawSearch || '')}"
                 oninput="setRawSearch(this.value)"
                 class="field-input text-xs py-1.5 px-3 w-44" />
             </div>
@@ -6556,7 +6897,7 @@
 
     function setRawSearch(q) {
       appState.rawSearch = q;
-      renderCurrentView();
+      refreshFormKeepingFocus();
     }
 
     // =========================================================================
@@ -6588,7 +6929,7 @@
               <i data-lucide="file-text" class="w-3.5 h-3.5"></i> พิมพ์ / บันทึก PDF ขนาด A4
             </button>
             <button type="button" onclick="exportToExcel()" class="btn-pill bg-[#1B3B2B] hover:bg-[#244C38] text-[#FFFDF7] px-4 py-2 text-xs shadow-sm">
-              <i data-lucide="download" class="w-4 h-4 text-[#FF3EA5]"></i> Export .xlsx (ครบ 19 ชีท ตกแต่งตาราง)
+              <i data-lucide="download" class="w-4 h-4 text-[#FF3EA5]"></i> Export .xlsx (ตกแต่งตารางครบทุกชีท)
             </button>
           </div>
         </div>
@@ -6659,7 +7000,8 @@
         if (idx === 7) noteHtml = `<span class="font-bold text-teal-900">40° / ${fmtNum(bp.total40)}</span>`;
         if (idx === 8) noteHtml = `<span class="font-bold text-amber-900">70° / ${fmtNum(bp.total70)}</span>`;
         if (r.id === lastTid && recvIds.length > 0) {
-          noteHtml = `<span class="font-bold text-blue-900">${fmtNum(bp.exactEndingLastTe)} เท</span> <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold">ยอดเท: ${fmtNum(bp.gaugeTe)} (${bp.teDiff >= 0 ? '+' : ''}${bp.teDiff.toFixed(2)})</span>`;
+          const lastNote = `<span class="font-bold text-blue-900">${fmtNum(bp.exactEndingLastTe)} เท</span> <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold">ยอดเท: ${fmtNum(bp.gaugeTe)} (${bp.teDiff >= 0 ? '+' : ''}${bp.teDiff.toFixed(2)})</span>`;
+          noteHtml = noteHtml ? `${noteHtml} · ${lastNote}` : lastNote;
         }
         const tankMatDoc = day.blending?.tankMatDocs?.[r.id];
         if (tankMatDoc) {
@@ -6679,7 +7021,7 @@
                     `;
       }).join('')}
                   <tr class="bg-slate-200/80 font-bold text-slate-900">
-                    <td>รวม (${day.blending.startBatchNo}–${Number(day.blending.startBatchNo) + bp.N - 1} = ${bp.N} ถัง)</td>
+                    <td>รวม (${bp.N > 0 ? `${day.blending.startBatchNo}–${Number(day.blending.startBatchNo) + bp.N - 1}` : '-'} = ${bp.N} ถัง)</td>
                     <td class="text-right tabular-nums">${fmtNum(recon.summary111.opening)}</td>
                     <td class="text-right tabular-nums text-teal-800">${fmtNum(bp.total40)}</td>
                     <td class="text-center">-</td>
@@ -6696,14 +7038,26 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div class="formula-callout rounded-xl p-3 space-y-1">
                 <div class="font-bold text-rose-900">① & ② สูตรหาปริมาณรับเติมเต็มถังก่อนหน้า</div>
-                <div>• ถัง ${escHtml(firstTid)}: ${fmtNum(110000)} − ${fmtNum(tf1.opening)} = <b>${fmtNum(tf1.needToFull)} L</b></div>
-                ${recvIds.length > 1 ? `<div>• ถัง ${escHtml(secondTid)}: ${fmtNum(110000)} − (${fmtNum(tf2.opening)} − ${fmtNum(tf2.outBottling)}) = <b>${fmtNum(tf2.needToFull)} L</b></div>` : ''}
+                ${bp.N === 0 || recvIds.length === 0 ? `
+                  <div class="text-slate-500">ไม่มีรายการปรุงสุราในวันนี้</div>
+                ` : (recvIds.length === 1 ? `
+                  <div class="text-slate-600">มีถังรับปรุงเพียงถังเดียว (${escHtml(lastTid)}) จึงคำนวณจากยอดวัดถังสุดท้ายโดยตรง</div>
+                ` : recvIds.slice(0, -1).map((tid) => {
+                  const tf = bp.tankFlow[tid] || { workingVol: 110000, opening: 0, outBottling: 0, needToFull: 0 };
+                  const wv = tf.workingVol || 110000;
+                  const baseExpr = tf.outBottling > 0 ? `(${fmtNum(tf.opening)} − ${fmtNum(tf.outBottling)})` : fmtNum(tf.opening);
+                  return `<div>• ถัง ${escHtml(tid)}: ${fmtNum(wv)} − ${baseExpr} = <b>${fmtNum(tf.needToFull)} L</b></div>`;
+                }).join(''))}
               </div>
               <div class="formula-callout rounded-xl p-3 space-y-1">
-                <div class="font-bold text-rose-900">② & ④ สูตรคำนวณจากยอดถังบ่มถังสุดท้าย (${escHtml(lastTid)})</div>
-                <div>• ยอดถังสุดท้ายเพิ่ม: <b>${fmtNum(bp.approxNetLast)} L</b> · รวม 40° ดิบ: <b>${fmtNum(bp.approxTotal40)} L</b> ÷ ${bp.N} = <b>${bp.avg40Raw.toFixed(2)}</b></div>
-                <div>• ปรับลงตัว ×40/70 (±6): <b>${fmtNum(bp.activeVol40)} L (40°)</b> × 40/70 = <b>${fmtNum(bp.activeVol70)} L (70°)</b>${bp.isManualOverride ? ' (กำหนดเอง)' : ''}</div>
-                <div>• รับจริงถัง ${escHtml(lastTid)}: ${fmtNum(bp.total40)} − ${fmtNum(bp.sumEarlierNeed)} = <b>${fmtNum(bp.exactNetLast)} L</b> (คงเหลือ <b>${fmtNum(bp.exactEndingLast)} L = ${fmtNum(bp.exactEndingLastTe)} เท</b>)</div>
+                <div class="font-bold text-rose-900">③ & ④ สูตรคำนวณจากยอดถังบ่มถังสุดท้าย (${escHtml(recvIds.length > 0 ? lastTid : '-')})</div>
+                ${bp.N === 0 || recvIds.length === 0 ? `
+                  <div class="text-slate-500">ไม่มีรายการปรุงสุราในวันนี้</div>
+                ` : `
+                  <div>• ยอดถังสุดท้ายเพิ่ม: <b>${fmtNum(bp.approxNetLast)} L</b> · รวม 40° ดิบ: <b>${fmtNum(bp.approxTotal40)} L</b> ÷ ${bp.N} = <b>${bp.avg40Raw.toFixed(2)}</b></div>
+                  <div>• ปรับลงตัว ×40/70 (±6): <b>${fmtNum(bp.activeVol40)} L (40°)</b> × 40/70 = <b>${fmtNum(bp.activeVol70)} L (70°)</b>${bp.isManualOverride ? ' (กำหนดเอง)' : ''}</div>
+                  <div>• รับจริงถัง ${escHtml(lastTid)}: ${fmtNum(bp.total40)} − ${fmtNum(bp.sumEarlierNeed)} = <b>${fmtNum(bp.exactNetLast)} L</b> (คงเหลือ <b>${fmtNum(bp.exactEndingLast)} L = ${fmtNum(bp.exactEndingLastTe)} เท</b>)</div>
+                `}
               </div>
             </div>
 
@@ -6790,7 +7144,7 @@
                         <tr>
                           <td class="font-bold text-rose-800">${escHtml(r.id)}</td>
                           <td class="text-right tabular-nums">${fmtNum(r.opening)} / 70°</td>
-                          <td class="text-right">-</td>
+                          <td class="text-right tabular-nums text-amber-800">${r.colF > 0 ? fmtNum(r.colF) : '-'}</td>
                           <td class="text-center">-</td>
                           <td class="text-right tabular-nums text-rose-700 font-bold">${fmtNum(r.colI)}</td>
                           <td class="text-center">-</td>
@@ -6799,10 +7153,16 @@
                         </tr>
                       `;
           }).join('');
+          const runningToBal = {};
           const toRows = (day.transfers70 || []).map((tr) => {
             const r = recon.tankRows[tr.toTankId];
             if (!r) return '';
-            const beforeTransfer = r.opening - r.colG;
+            if (runningToBal[tr.toTankId] === undefined) {
+              runningToBal[tr.toTankId] = r.opening - r.colG;
+            }
+            const beforeTransfer = runningToBal[tr.toTankId];
+            const afterTransfer = beforeTransfer + (Number(tr.amount) || 0);
+            runningToBal[tr.toTankId] = afterTransfer;
             return `
                         <tr>
                           <td class="font-bold text-rose-800">${escHtml(r.id)}</td>
@@ -6811,7 +7171,7 @@
                           <td class="text-center">-</td>
                           <td class="text-right">-</td>
                           <td class="text-center">-</td>
-                          <td class="text-right tabular-nums font-bold">${fmtNum(r.ending)} / 70°</td>
+                          <td class="text-right tabular-nums font-bold">${fmtNum(afterTransfer)} / 70°</td>
                           <td class="text-[11px] text-rose-800 font-semibold">(${escHtml(tr.sapOrder || '-')})</td>
                         </tr>
                       `;
@@ -6835,7 +7195,7 @@
           <div class="ledger-paper rounded-3xl p-5 sm:p-6 space-y-5">
             <div class="text-center border-b-2 border-slate-800 pb-3">
               <div class="text-lg sm:text-xl font-bold text-slate-900">ตารางคำนวณการปรุงรายถัง & ส่งบรรจุ</div>
-              <div class="text-sm font-semibold text-slate-700 mt-0.5">แตกยอดถังปรุงที่ ${day.blending.startBatchNo}–${Number(day.blending.startBatchNo) + bp.N - 1} · การตัดยอดโอนล้นระหว่างถังบ่ม · การส่งไปเตรียม 1 และ เตรียม 2</div>
+              <div class="text-sm font-semibold text-slate-700 mt-0.5">แตกยอดถังปรุงที่ ${bp.N > 0 ? `${day.blending.startBatchNo}–${Number(day.blending.startBatchNo) + bp.N - 1}` : '-'} · การตัดยอดโอนล้นระหว่างถังบ่ม · การส่งไปเตรียม 1 และ เตรียม 2</div>
             </div>
 
             <!-- Right Page Main Table: Batches 52..58 (with H01/H02 + SAP/MatDoc) + Bottling Dispatches -->
@@ -6984,12 +7344,10 @@
       const distTargets = recon.distTargets || [];
       const distTargetLabel = distTargets.filter((dt) => Number(dt.amount) > 0).map((dt) => `${dt.tankId}(${fmtNum(dt.amount, 3)})`).join(', ') || '-';
       const distMolTag = dist.molassesSupplier ? ` · ${dist.molassesSupplier}` : '';
-      const receiverRows = [
-        { id: '109/1', sapLoc: '2301', val: Number(dist.d1) || 0, target: distTargetLabel + distMolTag },
-        { id: '109/2', sapLoc: '2302', val: Number(dist.d2) || 0, target: distTargetLabel + distMolTag },
-        { id: '109/3', sapLoc: '2303', val: Number(dist.d3) || 0, target: distTargetLabel + distMolTag },
-        { id: '109/4', sapLoc: '2304', val: Number(dist.d4) || 0, target: distTargetLabel + distMolTag }
-      ];
+      const distVals = [Number(dist.d1) || 0, Number(dist.d2) || 0, Number(dist.d3) || 0, Number(dist.d4) || 0];
+      const receiverRows = DISTILLATION_RECEIVERS.map((dr, i) => ({
+        id: dr.id, sapLoc: dr.sapLoc, val: distVals[i], target: distTargetLabel + distMolTag
+      }));
 
       const docNoDate = formatDocNoFromDate(recon.dateKey);
       const formalDateLine = formatFactoryFormalDate(recon.dateKey);
@@ -7183,8 +7541,8 @@
       const cvdDays = o8CvdMonths * 30;
 
       // 100% Capacity Breakdown Sections (Auto-calculated + Only 1 & 2; Items 3, 4, 5 removed)
-      const list70 = Object.values(recon.tankRows).filter((r) => r.degree === 70);
-      const list40 = Object.values(recon.tankRows).filter((r) => r.degree === 40);
+      const list70 = Object.values(recon.tankRows).filter((r) => r.building === 'aging' || r.building === 'b110');
+      const list40 = Object.values(recon.tankRows).filter((r) => r.building === 'b111' || r.building === 'b113');
       const e14Cap70 = list70.reduce((s, r) => s + (Number(r.workingVol) || 0), 0) || 16180000;
       const e17Cap40 = list40.reduce((s, r) => s + (Number(r.workingVol) || 0), 0) || 1560000;
       const autoCap100 = (e14Cap70 * 70 / 40) + e17Cap40;
@@ -7260,24 +7618,38 @@
 
     function renderSummaryPercentTab(recon) {
       const dates = getSortedDates();
-      const reconByDayNum = {};
-      const dailyRows = dates.map((dKey) => {
+      const activeParts = String(appState.activeDate || '2569-11-17').split('-');
+      const activeBeYear = parseInt(activeParts[0], 10) || 2569;
+      const activeMonth = Math.max(1, Math.min(12, parseInt(activeParts[1], 10) || 11));
+      const activeCeYear = activeBeYear - 543;
+      const daysInMonth = new Date(Date.UTC(activeCeYear, activeMonth, 0)).getUTCDate();
+      const monthNameFull = THAI_MONTHS_FULL[activeMonth - 1];
+      const monthNameShort = THAI_MONTHS_SHORT[activeMonth - 1];
+      const yr2 = String(activeBeYear).slice(-2);
+      const monthPrefix = `${activeBeYear}-${String(activeMonth).padStart(2, '0')}-`;
+      const monthShortLabel = `${monthNameShort} ${yr2}`;
+
+      const monthDates = dates.filter((dKey) => dKey.startsWith(monthPrefix));
+      const reconByDateKey = {};
+      const dailyRows = monthDates.map((dKey) => {
         const r = computeDayReconciliation(dKey);
-        if (r?.day?.dayNumber) reconByDayNum[r.day.dayNumber] = r;
+        if (r) reconByDateKey[dKey] = r;
         return r;
-      });
+      }).filter(Boolean);
       const allTanks = Object.values(recon.tankRows);
       const pm = computePctLiquorMetrics(recon);
       const c70 = getSpiritColorSpec('สุราขาว 70 ดีกรี', 70);
       const c40 = getSpiritColorSpec('สุราขาว 40 ดีกรี', 40);
 
-      // Build full 30-day November 2569 ledger rows so the table extends down to the bottom edge matching the 53-tank sheet
+      // Build full-month ledger rows matching active month/year dynamically
       const monthDays = [];
-      for (let d = 1; d <= 30; d++) {
-        const rec = reconByDayNum[d] || null;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dKeyTarget = `${monthPrefix}${String(d).padStart(2, '0')}`;
+        const rec = reconByDateKey[dKeyTarget] || null;
         monthDays.push({
           dayNum: d,
-          displayDate: `${d} พฤศจิกายน 2569`,
+          dKeyTarget,
+          displayDate: `${d} ${monthNameFull} ${activeBeYear}`,
           rec
         });
       }
@@ -7300,9 +7672,9 @@
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-xs font-bold text-[#436152]">เดือน:</span>
-                <input type="text" class="field-input text-xs font-bold py-1 px-2.5 w-28" value="${escHtml(pm.cfg.monthName)}" oninput="updatePctLiquorField('monthName', this.value)" />
+                <input data-fk="pct-monthName" type="text" class="field-input text-xs font-bold py-1 px-2.5 w-28" value="${escHtml(pm.cfg.monthName)}" oninput="updatePctLiquorField('monthName', this.value)" />
                 <span class="text-xs font-bold text-[#436152]">แก้ไขครั้งที่:</span>
-                <input type="text" class="field-input text-xs font-bold py-1 px-2 w-16 text-center" value="${escHtml(pm.cfg.revision)}" oninput="updatePctLiquorField('revision', this.value)" />
+                <input data-fk="pct-revision" type="text" class="field-input text-xs font-bold py-1 px-2 w-16 text-center" value="${escHtml(pm.cfg.revision)}" oninput="updatePctLiquorField('revision', this.value)" />
               </div>
             </div>
 
@@ -7399,9 +7771,9 @@
                       <td class="py-3 px-3 text-right tabular-nums whitespace-nowrap">${fmtNum(pm.e17Cap40)}</td>
                       <td class="py-3 px-3 text-right tabular-nums font-bold whitespace-nowrap" style="color:${c40.text};">${fmtNum(pm.e4Actual40)}</td>
                       <td class="py-3 px-3 text-right tabular-nums font-extrabold whitespace-nowrap" style="color:${c40.text};">${pm.e19Pct40.toFixed(2)}%</td>
-                      <td class="py-3 px-3 text-right tabular-nums font-bold text-[#1B3B2B] whitespace-nowrap">${fmtNum(pm.h17Rem40)}</td>
-                      <td class="py-3 px-3 text-right tabular-nums text-[#436152] whitespace-nowrap">${fmtNum(pm.h18Rem40Te)}</td>
-                      <td class="py-3 px-3 text-right tabular-nums font-bold text-[#1B3B2B] whitespace-nowrap">${pm.j17Rem40Pct.toFixed(2)}%</td>
+                      <td class="py-3 px-3 text-right tabular-nums whitespace-nowrap ${pm.h17Rem40 < 0 ? 'text-rose-700 font-bold' : 'font-bold text-[#1B3B2B]'}">${pm.h17Rem40 < 0 ? `(${fmtNum(Math.abs(pm.h17Rem40))})` : fmtNum(pm.h17Rem40)}</td>
+                      <td class="py-3 px-3 text-right tabular-nums whitespace-nowrap ${pm.h18Rem40Te < 0 ? 'text-rose-700' : 'text-[#436152]'}">${fmtNum(pm.h18Rem40Te)}</td>
+                      <td class="py-3 px-3 text-right tabular-nums whitespace-nowrap ${pm.j17Rem40Pct < 0 ? 'text-rose-700 font-bold' : 'font-bold text-[#1B3B2B]'}">${pm.j17Rem40Pct < 0 ? `(${Math.abs(pm.j17Rem40Pct).toFixed(2)}%)` : `${pm.j17Rem40Pct.toFixed(2)}%`}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -7414,8 +7786,8 @@
             <div class="liquid-glass rounded-3xl p-5 sm:p-6 flex flex-col justify-between h-full space-y-4">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h3 class="text-base sm:text-lg font-bold text-slate-900">สรุปยอดรายวัน (ชีท "ยอดรายวัน พ.ย. 69")</h3>
-                  <p class="text-xs text-slate-500">แสดงตารางสรุปยอดรายวันครบทั้งเดือน พฤศจิกายน 2569 (1–30 พ.ย. 69)</p>
+                  <h3 class="text-base sm:text-lg font-bold text-slate-900">สรุปยอดรายวัน (ชีท "ยอดรายวัน ${escHtml(monthShortLabel)}")</h3>
+                  <p class="text-xs text-slate-500">แสดงตารางสรุปยอดรายวันครบทั้งเดือน ${escHtml(monthNameFull)} ${activeBeYear} (1–${daysInMonth} ${escHtml(monthShortLabel)})</p>
                 </div>
                 <button type="button" onclick="openDateExplorerModal()" class="btn-pill bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 text-xs">
                   <i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i> เลือกวันจากปฏิทิน / เพิ่มวันย้อนหลัง
@@ -7425,7 +7797,7 @@
                 <table class="w-full h-full text-xs border-collapse">
                   <thead>
                     <tr class="bg-[#1B3B2B] text-[#FFFDF7] font-bold">
-                      <th class="py-2.5 px-2.5 text-center">วันที่ (พ.ย. 69)</th>
+                      <th class="py-2.5 px-2.5 text-center">วันที่ (${escHtml(monthShortLabel)})</th>
                       <th class="py-2.5 px-2.5 text-center">รับกลั่น 70°</th>
                       <th class="py-2.5 px-2.5 text-center">จ่ายปรุง 70°</th>
                       <th class="py-2.5 px-2.5 text-center">คงเหลือ 70°</th>
@@ -7438,7 +7810,7 @@
                     ${monthDays.map((md) => {
         const r = md.rec;
         const isActive = r && r.dateKey === appState.activeDate;
-        const dKeyTarget = `2569-11-${String(md.dayNum).padStart(2, '0')}`;
+        const dKeyTarget = md.dKeyTarget;
         if (r) {
           return `
                           <tr onclick="switchWorkingDate('${r.dateKey}')" class="cursor-pointer ${isActive ? 'bg-[#FFE3F2]/75 font-bold text-[#1B3B2B]' : 'bg-[#FFFDF7] font-semibold hover:bg-[#EFE6D1]/60'}">
@@ -7470,7 +7842,7 @@
                   </tbody>
                   <tfoot>
                     <tr class="bg-[#1B3B2B] text-[#FFFDF7] font-bold border-t-2 border-[#10261B]">
-                      <td class="py-2.5 px-2.5">รวมสะสม พ.ย. 69</td>
+                      <td class="py-2.5 px-2.5">รวมสะสม ${escHtml(monthShortLabel)}</td>
                       <td class="py-2.5 px-2.5 text-right tabular-nums text-[#54D9AB]">${fmtNum(totDist70)}</td>
                       <td class="py-2.5 px-2.5 text-right tabular-nums text-[#DCF5EB]">${fmtNum(totBlend70)}</td>
                       <td class="py-2.5 px-2.5 text-right tabular-nums">${fmtNum(lastRec.summary70.ending)}</td>
@@ -7592,9 +7964,17 @@
       const allRecons = sortedDates.map((dKey) => computeDayReconciliation(dKey));
       const activeRecon = computeDayReconciliation(appState.activeDate);
 
-      // 1) Sheet: ยอดรายวัน พ.ย. 69
+      const actParts = String(appState.activeDate || '2569-11-17').split('-');
+      const actYear = parseInt(actParts[0], 10) || 2569;
+      const actMonthIdx = Math.max(0, Math.min(11, (parseInt(actParts[1], 10) || 11) - 1));
+      const actMonthFull = THAI_MONTHS_FULL[actMonthIdx];
+      const actMonthShort = THAI_MONTHS_SHORT[actMonthIdx];
+      const actYr2 = String(actYear).slice(-2);
+      const dailySummarySheetName = `ยอดรายวัน ${actMonthShort} ${actYr2}`.slice(0, 31);
+
+      // 1) Sheet: ยอดรายวัน
       const summaryAoa = [
-        ['สรุปยอดรับ-จ่ายน้ำสุราคงโรงรายวัน ประจำเดือน พฤศจิกายน 2569 (หน่วย: ลิตร · ทศนิยม 2 ตำแหน่ง)'],
+        [`สรุปยอดรับ-จ่ายน้ำสุราคงโรงรายวัน ประจำเดือน ${actMonthFull} ${actYear} (หน่วย: ลิตร · ทศนิยม 2 ตำแหน่ง)`],
         ['ระบบบริหารจัดการสต็อกน้ำสุราคงโรง & กระทบยอด SAP อัตโนมัติ'],
         [],
         ['วันที่', 'เลขที่เอกสาร', '70° ยกมา (L)', '70° รับกลั่น (L)', '70° โอนภายใน (L)', '70° จ่ายปรุง (L)', '70° คงเหลือ (L)', '40° ยกมา (L)', '40° รับปรุง (L)', '40° จ่ายบรรจุ (L)', '40° ตกพื้น (L)', '40° คงเหลือ (L)'],
@@ -7623,7 +8003,7 @@
         [],
         [3, 4]
       );
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'ยอดรายวัน พ.ย. 69');
+      XLSX.utils.book_append_sheet(wb, wsSummary, dailySummarySheetName);
 
       // 2) Sheet: เปอร์เซ็นต์ถัง
       const pctAoa = [
@@ -7686,11 +8066,24 @@
       );
       XLSX.utils.book_append_sheet(wb, wsPctLiquor, '%สุรา');
 
-      // 3) Daily Sheets ('1', '2', ..., '17', ...) matching exact row structure of the factory Excel template
+      // 3) Daily Sheets ('1', '2', ..., '17', ...) with collision-safe unique sheet names across months
+      const usedSheetNames = new Set([dailySummarySheetName, 'เปอร์เซ็นต์ถัง', '%สุรา', 'สรุปปรุง & MatDoc'].map((s) => s.slice(0, 31)));
       allRecons.forEach((r) => {
         const ws = buildDailyFactoryWorksheet(r);
-        const sheetName = String(r.day.dayNumber || r.dateKey);
-        XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
+        const dParts = String(r.dateKey || '').split('-');
+        const dNum = String(r.day.dayNumber || parseInt(dParts[2], 10) || r.dateKey);
+        const mIdx = Math.max(0, Math.min(11, (parseInt(dParts[1], 10) || 11) - 1));
+        const y2 = String(dParts[0] || '').slice(-2);
+        let sheetName = dNum;
+        if (usedSheetNames.has(sheetName)) {
+          sheetName = `${dNum}_${THAI_MONTHS_SHORT[mIdx]}${y2}`;
+        }
+        if (usedSheetNames.has(sheetName)) {
+          sheetName = r.dateKey;
+        }
+        sheetName = sheetName.slice(0, 31);
+        usedSheetNames.add(sheetName);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
       });
 
       // 4) Sheet: สรุปปรุง & MatDoc (Attachment 2 summary + per-batch breakdown)
@@ -7732,7 +8125,7 @@
       );
       XLSX.utils.book_append_sheet(wb, wsBlendMatDoc, 'สรุปปรุง & MatDoc');
 
-      const fname = `รายงานการรับ-จ่ายน้ำสุราคงโรง_พ.ย.69_${appState.activeDate}.xlsx`;
+      const fname = `รายงานการรับ-จ่ายน้ำสุราคงโรง_${appState.activeDate}.xlsx`;
       XLSX.writeFile(wb, fname);
       showToast('Export ไฟล์ .xlsx ตกแต่งตารางสำเร็จ', `ดาวน์โหลด ${fname} เรียบร้อย`, 'success');
     }
@@ -7781,13 +8174,10 @@
       agingRows.forEach(pushTankRow);
       b110Rows.forEach(pushTankRow);
 
-      [
-        { id: '109/1', sap: '2301', val: Number(dist.d1) || 0 },
-        { id: '109/2', sap: '2302', val: Number(dist.d2) || 0 },
-        { id: '109/3', sap: '2303', val: Number(dist.d3) || 0 },
-        { id: '109/4', sap: '2304', val: Number(dist.d4) || 0 }
-      ].forEach((rr) => {
-        aoa.push([rr.id, rr.sap, 'สุราขาว 70 ดีกรี', 0, Number(rr.val.toFixed(3)), 0, 0, 0, Number(rr.val.toFixed(3)), 0, `โอนเข้า ${distTargetDesc || dist.targetTankId}${distMolTag}`]);
+      const distVals = [Number(dist.d1) || 0, Number(dist.d2) || 0, Number(dist.d3) || 0, Number(dist.d4) || 0];
+      DISTILLATION_RECEIVERS.forEach((dr, i) => {
+        const v = distVals[i];
+        aoa.push([dr.id, dr.sapLoc, 'สุราขาว 70 ดีกรี', 0, Number(v.toFixed(3)), 0, 0, 0, Number(v.toFixed(3)), 0, `โอนเข้า ${distTargetDesc || dist.targetTankId}${distMolTag}`]);
       });
 
       totalRows.push(aoa.length);
@@ -7918,7 +8308,23 @@
     }
 
     function buildBottleTraceabilityData(dateKey) {
-      ensureDateRecordExists(dateKey);
+      if (!appState.days[dateKey]) {
+        const emptyDay = {
+          date: dateKey,
+          displayDate: formatThaiBeDate(dateKey, false),
+          docNo: formatDocNoFromDate(dateKey),
+          bottling: { prep1: { sapOrder: '-' }, prep2: { sapOrder: '-' } },
+          distillation: { molassesSupplier: (appState.molassesSuppliers && appState.molassesSuppliers[0]?.name) || 'บมจ. น้ำตาลมิตรผล' }
+        };
+        return {
+          recon: { summary113: { colH: 0 } },
+          day: emptyDay,
+          bp: { batches: [], total40: 0 },
+          timeInfo: estimateShiftProgressFromTime(appState.traceFilter?.bottleTime || '14:30'),
+          linesWithSources: [],
+          noRecord: true
+        };
+      }
       const recon = computeDayReconciliation(dateKey);
       if (!recon) return null;
       const day = recon.day;
@@ -7970,14 +8376,6 @@
         const minus1Tank111 = seqPrevTank111 || neighbors111.prevTank;
         const plus1Tank111 = seqNextTank111 || neighbors111.nextTank;
 
-        const primary70List = parsePrimary70TanksFromText(priorInfo.source70Tanks);
-        const approx70Neighbors = [];
-        primary70List.forEach((t70) => {
-          const nb = getNeighborTanks(t70, 'b110');
-          if (nb.prevTank && !primary70List.includes(nb.prevTank)) approx70Neighbors.push(`${nb.prevTank} (-1 ถัง)`);
-          if (nb.nextTank && !primary70List.includes(nb.nextTank)) approx70Neighbors.push(`${nb.nextTank} (+1 ถัง)`);
-        });
-
         const sortedDates = getSortedDates();
         const targetIdx = sortedDates.indexOf(dateKey);
         const matchingBatches = [];
@@ -8002,6 +8400,15 @@
             }
           });
         }
+
+        const live70List = matchingBatches.map((mb) => mb.source70Tank).filter((x) => x && x !== '-');
+        const primary70List = [...new Set([...parsePrimary70TanksFromText(priorInfo.source70Tanks), ...live70List])];
+        const approx70Neighbors = [];
+        primary70List.forEach((t70) => {
+          const nb = getNeighborTanks(t70, 'b110');
+          if (nb.prevTank && !primary70List.includes(nb.prevTank)) approx70Neighbors.push(`${nb.prevTank} (-1 ถัง)`);
+          if (nb.nextTank && !primary70List.includes(nb.nextTank)) approx70Neighbors.push(`${nb.nextTank} (+1 ถัง)`);
+        });
 
         const transfers70Info = [];
         const matchedDistRecords = [];
@@ -8078,13 +8485,16 @@
 
           const startRatio = totalSent > 0 ? startVol / totalSent : 0;
           const endRatio = totalSent > 0 ? endVol / totalSent : 1;
-          const estStartHour = 8 + Math.floor(startRatio * 12);
-          const estStartMin = Math.round(((startRatio * 12) % 1) * 60);
-          const estEndHour = 8 + Math.floor(endRatio * 12);
-          const estEndMin = Math.round(((endRatio * 12) % 1) * 60);
-          const estTimeWindow = `${String(estStartHour).padStart(2, '0')}:${String(Math.min(59, estStartMin)).padStart(2, '0')} – ${String(estEndHour).padStart(2, '0')}:${String(Math.min(59, estEndMin)).padStart(2, '0')} น.`;
+          const startTotalMins = Math.round((8 * 60) + startRatio * 720);
+          const endTotalMins = Math.round((8 * 60) + endRatio * 720);
+          const estStartHour = Math.floor(startTotalMins / 60);
+          const estStartMin = startTotalMins % 60;
+          const estEndHour = Math.floor(endTotalMins / 60);
+          const estEndMin = endTotalMins % 60;
+          const estTimeWindow = `${String(estStartHour).padStart(2, '0')}:${String(estStartMin).padStart(2, '0')} – ${String(estEndHour).padStart(2, '0')}:${String(estEndMin).padStart(2, '0')} น.`;
 
-          const isTimeMatched = totalSent > 0 && targetCumVol >= startVol && targetCumVol <= endVol;
+          const isLastDispatch = idx === rawDispatches.length - 1;
+          const isTimeMatched = totalSent > 0 && targetCumVol >= startVol && (isLastDispatch ? targetCumVol <= endVol : targetCumVol < endVol);
           const seqPrev = idx > 0 ? rawDispatches[idx - 1].tankId : null;
           const seqNext = idx < rawDispatches.length - 1 ? rawDispatches[idx + 1].tankId : null;
 
@@ -8200,7 +8610,7 @@
               <label class="block text-xs font-bold text-[#1B3B2B] mb-1 flex items-center gap-1">
                 <i data-lucide="search" class="w-3.5 h-3.5 text-[#1F8A65]"></i> 4. ค้นหารหัสสาย / ถัง / SAP / กากน้ำตาล
               </label>
-              <input type="text" class="field-input text-xs" placeholder="เช่น 0711, 13/111, 9/110, มิตรผล..."
+              <input data-fk="trace-query" type="text" class="field-input text-xs" placeholder="เช่น 0711, 13/111, 9/110, มิตรผล..."
                 value="${escHtml(appState.traceFilter?.query || '')}"
                 oninput="updateTraceFilter('query', this.value)" />
             </div>
@@ -8252,8 +8662,8 @@
                 </div>
                 <div>
                   <div class="text-sm font-semibold text-[#FFE3F2]">อาคารบรรจุ 113</div>
-                  <div class="text-base sm:text-lg font-extrabold text-white mt-0.5 leading-snug">เตรียม 1 & เตรียม 2/113</div>
-                  <div class="text-xs sm:text-sm text-[#E4EFE8] mt-1 leading-relaxed">SAP: <b>${escHtml(traceData.day.bottling?.prep1?.sapOrder || '-')}</b> · จ่ายรวม <b>${fmtNum(traceData.recon.summary113.colH)} L</b></div>
+                  <div class="text-base sm:text-lg font-extrabold text-white mt-0.5 leading-snug">${lineFilter === 'all' ? 'เตรียม 1 & เตรียม 2/113' : escHtml(firstLine?.prepId || lineFilter)}</div>
+                  <div class="text-xs sm:text-sm text-[#E4EFE8] mt-1 leading-relaxed">SAP: <b>${lineFilter === 'all' ? `${escHtml(traceData.day.bottling?.prep1?.sapOrder || '-')} / ${escHtml(traceData.day.bottling?.prep2?.sapOrder || '-')}` : escHtml(firstLine?.sapOrder || '-')}</b> · จ่ายรวม <b>${fmtNum(lineFilter === 'all' ? traceData.recon.summary113.colH : (firstLine?.discharge || 0))} L</b></div>
                 </div>
               </div>
 
@@ -8330,6 +8740,11 @@
 
         <!-- Detailed Reverse Traceability Cards per Bottling Line -->
         <div class="space-y-6">
+          ${traceData.noRecord ? `
+            <div class="liquid-glass rounded-3xl p-8 text-center text-sm text-[#436152]">
+              ยังไม่มีข้อมูลการบันทึกประจำวันที่ ${escHtml(traceData.day.displayDate)} · เลือกวันที่ที่มีการบันทึกจากปฏิทินหรือบันทึกข้อมูลหน้าฟอร์ม
+            </div>
+          ` : ''}
           ${filteredLines.map((pl) => `
             <div class="liquid-glass rounded-3xl p-5 sm:p-6 space-y-5">
               <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
@@ -8538,7 +8953,7 @@
         renderCurrentView();
       } else {
         clearTimeout(window._traceSearchTimer);
-        window._traceSearchTimer = setTimeout(() => renderCurrentView(), 250);
+        window._traceSearchTimer = setTimeout(() => refreshFormKeepingFocus(), 250);
       }
     }
 
@@ -8583,7 +8998,14 @@
             <div>
               <label class="block font-bold text-[#B8166F] mb-1">บริษัทกากน้ำตาลต้นทาง</label>
               <select id="lot-hist-molasses" class="field-input text-xs font-bold">
-                ${suppliers.map((s) => `<option value="${escHtml(s.name)}" ${(info.molassesSupplier || 'บมจ. น้ำตาลมิตรผล') === s.name ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
+                ${(() => {
+                  const curM = info.molassesSupplier || suppliers[0]?.name || 'บมจ. น้ำตาลมิตรผล';
+                  const hasCurM = suppliers.some((s) => s.name === curM);
+                  return [
+                    ...(!hasCurM && curM ? [`<option value="${escHtml(curM)}" selected>${escHtml(curM)}</option>`] : []),
+                    ...suppliers.map((s) => `<option value="${escHtml(s.name)}" ${curM === s.name ? 'selected' : ''}>${escHtml(s.name)}</option>`)
+                  ].join('');
+                })()}
               </select>
             </div>
             <div>
@@ -8608,7 +9030,7 @@
         })
       }).then((res) => {
         if (res.isConfirmed && res.value) {
-          if (!appState.tankLotHistory) appState.tankLotHistory = { ...DEFAULT_TANK_LOT_HISTORY };
+          if (!appState.tankLotHistory) appState.tankLotHistory = structuredCloneSafe(DEFAULT_TANK_LOT_HISTORY);
           appState.tankLotHistory[res.value.tankId] = res.value;
           saveAppState();
           renderCurrentView();
@@ -8679,7 +9101,7 @@
                     <h3 class="text-base font-bold text-slate-900">${escHtml(b.name)} (${list.length} ถัง)</h3>
                     <p class="text-xs text-slate-500">${escHtml(b.desc)}</p>
                   </div>
-                  <span class="px-3 py-1 rounded-full bg-blue-50 text-blue-800 text-xs font-bold">
+                  <span data-setup-sum="${escHtml(b.id)}" class="px-3 py-1 rounded-full bg-blue-50 text-blue-800 text-xs font-bold">
                     รวมยอดยกมาตั้งต้น: ${fmtNum(sumOpen)} / ${fmtNum(sumCap)} L
                   </span>
                 </div>
@@ -8698,7 +9120,7 @@
 
                         <div>
                           <label class="block text-[10px] font-bold text-blue-800 mb-0.5">ยอดยกมาเริ่มต้น (ลิตร)</label>
-                          <input type="number" step="0.01" class="field-input text-xs font-bold py-1.5 text-right"
+                          <input type="number" min="0" step="0.01" class="field-input text-xs font-bold py-1.5 text-right"
                             value="${val}"
                             oninput="updateOpeningBalanceField('${escHtml(t.id)}', this.value)" />
                         </div>
@@ -8737,8 +9159,16 @@
     }
 
     function updateOpeningBalanceField(tankId, val) {
-      appState.openingBalances[tankId] = parseFloat(val) || 0;
+      appState.openingBalances[tankId] = Math.max(0, parseFloat(val) || 0);
       saveAppState();
+      const tMeta = MASTER_TANKS.find((t) => t.id === tankId);
+      if (tMeta) {
+        const bList = MASTER_TANKS.filter((t) => t.building === tMeta.building);
+        const sumOpen = bList.reduce((s, t) => s + (Number(appState.openingBalances[t.id]) || 0), 0);
+        const sumCap = bList.reduce((s, t) => s + t.workingVol, 0);
+        const badge = document.querySelector(`[data-setup-sum="${tMeta.building}"]`);
+        if (badge) badge.textContent = `รวมยอดยกมาตั้งต้น: ${fmtNum(sumOpen)} / ${fmtNum(sumCap)} L`;
+      }
     }
 
     function updateAdminTankSpec(tankId, field, val) {
@@ -8783,7 +9213,12 @@
       }).then((res) => {
         if (res.isConfirmed) {
           localStorage.removeItem(STORAGE_KEYS.STATE);
+          localStorage.removeItem('liquor_stock_state_v2');
           loadAppState();
+          appState.setupCompleted = true;
+          appState.activeDate = '2569-11-17';
+          if (appState.traceFilter) appState.traceFilter.date = '2569-11-17';
+          saveAppState();
           populateDateSelectors();
           renderCurrentView();
           showToast('รีเซ็ตข้อมูลกลับเป็นค่าเริ่มต้นสำเร็จ', 'ข้อมูลวันที่ 17 พ.ย. 2569 พร้อมใช้งาน', 'success');
@@ -8796,6 +9231,7 @@
     // =========================================================================
     window.addEventListener('DOMContentLoaded', () => {
       loadAppState();
+      LiquidGlassEngine.init();
       initAuth();
       try {
         const params = new URLSearchParams(window.location.search);
