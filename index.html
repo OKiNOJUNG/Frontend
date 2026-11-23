@@ -1452,7 +1452,7 @@
   </div>
 
   <!-- ================= ADMIN USER MANAGEMENT MODAL ================= -->
-  <div id="user-modal" class="modal-overlay hidden no-print">
+  <div id="user-modal" class="modal-overlay hidden no-print" onclick="if(event.target===this)closeUserManagementModal()">
     <div class="w-full max-w-2xl liquid-glass bg-white rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between pb-4 border-b border-slate-200">
         <div class="flex items-center gap-3">
@@ -1504,7 +1504,7 @@
   </div>
 
   <!-- ================= TANK DETAIL / HOLD / ADMIN CONFIG MODAL ================= -->
-  <div id="tank-modal" class="modal-overlay hidden no-print">
+  <div id="tank-modal" class="modal-overlay hidden no-print" onclick="if(event.target===this)closeTankModal()">
     <div id="tank-modal-content"
       class="w-full max-w-lg liquid-glass bg-white rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto"></div>
   </div>
@@ -1705,6 +1705,9 @@
         manualAvg70: 17040,
         customVol40: null,
         customVol70: null,
+        customVol40_2: null,
+        customVol70_2: null,
+        rate2BatchIndices: null,
         totalMatDoc: '',
         tankMatDocs: {},
         sourceTanks70: [
@@ -1877,6 +1880,9 @@
         manualAvg70: 17040,
         customVol40: null,
         customVol70: null,
+        customVol40_2: null,
+        customVol70_2: null,
+        rate2BatchIndices: null,
         totalMatDoc: '',
         tankMatDocs: {},
         sourceTanks70: [],
@@ -1894,12 +1900,22 @@
       if (!Array.isArray(d.blending.matDocOrders)) d.blending.matDocOrders = [];
       if (!Array.isArray(d.blending.blendingIds)) d.blending.blendingIds = [];
       if (!d.blending.tankMatDocs || typeof d.blending.tankMatDocs !== 'object') d.blending.tankMatDocs = {};
+      if (d.blending.rate2BatchIndices !== null && d.blending.rate2BatchIndices !== undefined) {
+        d.blending.rate2BatchIndices = Array.isArray(d.blending.rate2BatchIndices)
+          ? [...new Set(d.blending.rate2BatchIndices.map((i) => parseInt(i, 10)).filter((i) => Number.isInteger(i) && i >= 0))].sort((a, b) => a - b)
+          : null;
+      } else {
+        d.blending.rate2BatchIndices = null;
+      }
 
       if (d.blending.calcMode === 'manual' &&
           (d.blending.customVol40 === null || d.blending.customVol40 === undefined || d.blending.customVol40 === '') &&
           (d.blending.customVol70 === null || d.blending.customVol70 === undefined || d.blending.customVol70 === '') &&
           Number(d.blending.manualAvg70) > 0) {
         d.blending.customVol70 = Number(d.blending.manualAvg70);
+        if (d.blending.rate2BatchIndices === null) {
+          d.blending.rate2BatchIndices = [];
+        }
       }
       if (d.blending.startBatchNoManual === undefined && parseInt(d.blending.startBatchNo, 10) > 0) {
         d.blending.startBatchNoManual = true;
@@ -2101,21 +2117,46 @@
       return { vol40: best40, vol70, diff: best40 - raw };
     }
 
+    function formatBatchNoRanges(nums) {
+      if (!Array.isArray(nums) || nums.length === 0) return 'ยังไม่ได้กำหนดถัง';
+      const sorted = [...new Set(nums.map((n) => parseInt(n, 10)).filter(Number.isFinite))].sort((a, b) => a - b);
+      if (sorted.length === 0) return 'ยังไม่ได้กำหนดถัง';
+      const ranges = [];
+      let s = sorted[0];
+      let e = sorted[0];
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i] === e + 1) {
+          e = sorted[i];
+        } else {
+          ranges.push(s === e ? `#${s}` : `#${s}–#${e}`);
+          s = sorted[i];
+          e = sorted[i];
+        }
+      }
+      ranges.push(s === e ? `#${s}` : `#${s}–#${e}`);
+      return ranges.join(', ');
+    }
+
     function computeBlendingPlan(dayData, openingMap, learnedAvg40 = 29900) {
       const bl = dayData.blending || {};
       const parsedCount = parseInt(bl.batchCount, 10);
       const N = Number.isFinite(parsedCount) ? Math.max(0, parsedCount) : 0;
       const recvIds = [...new Set((Array.isArray(bl.receivingTanks40) ? bl.receivingTanks40 : []).filter(Boolean))];
       const srcSpecs = Array.isArray(bl.sourceTanks70) ? bl.sourceTanks70 : [];
+      const startNo = parseInt(bl.startBatchNo, 10) || 1;
 
       if (N === 0) {
         return {
-          N: 0, batches: [], total70: 0, total40: 0, recvDetails: [], tankFlow: {}, source70Out: {},
+          N: 0, startBatchNo: startNo, batches: [], total70: 0, total40: 0, recvDetails: [], tankFlow: {}, source70Out: {},
           sumEarlierNeed: 0, baseLast: 0, lastBaseTe: 1000,
           gaugeTe: Number(bl.lastTankGaugeTe) || 0, estimatedGaugeTe: Number(bl.lastTankGaugeTe) || 1000,
           isGaugeAuto: false, learnedAvg40,
           approxNetLast: 0, approxTotal40: 0, avg40Raw: 0,
-          autoVol40: 0, autoVol70: 0, autoDiff: 0, activeVol40: 0, activeVol70: 0, isManualOverride: false,
+          autoVol40: 0, autoVol70: 0, autoVol40_1: 0, autoVol70_1: 0, autoVol40_2: 0, autoVol70_2: 0,
+          autoDiff: 0, activeVol40: 0, activeVol70: 0,
+          activeVol40_1: 0, activeVol70_1: 0, activeVol40_2: 0, activeVol70_2: 0,
+          rate1BatchIndices: [], rate2BatchIndices: [], rate1BatchNos: [], rate2BatchNos: [],
+          count1: 0, count2: 0, autoCount1: 0, autoCount2: 0, isDualRate: false, isManualOverride: false,
           base70Step: 0, base40Step: 0, high70Step: 0, high40Step: 0,
           countBase: 0, countHigh: 0, exactNetLast: 0, exactEndingLast: 0, exactEndingLastTe: 0, teDiff: 0,
           agingTankSummaries: [], totalMatDoc: bl.totalMatDoc || ''
@@ -2179,38 +2220,93 @@
       }
 
       const autoPair = findNearestExactBlendingPair(avg40Raw);
-      const autoVol40 = autoPair.vol40;
-      const autoVol70 = autoPair.vol70;
+      let autoVol40_1 = 0;
+      let autoVol70_1 = 0;
+      let autoVol40_2 = 0;
+      let autoVol70_2 = 0;
+      let autoRate2Indices = [];
+
+      if (approxTotal40 > 0) {
+        if (N === 1 || Math.floor(avg40Raw / 14) === 0) {
+          autoVol40_1 = autoPair.vol40;
+          autoVol70_1 = autoPair.vol70;
+          autoVol40_2 = autoVol40_1 + 14;
+          autoVol70_2 = autoVol70_1 + 8;
+        } else {
+          autoVol40_1 = Math.floor(avg40Raw / 14) * 14;
+          autoVol70_1 = (autoVol40_1 / 7) * 4;
+          autoVol40_2 = autoVol40_1 + 14;
+          autoVol70_2 = autoVol70_1 + 8;
+          const rem40 = approxTotal40 - (N * autoVol40_1);
+          const autoHighCount = Math.min(N - 1, Math.max(0, Math.floor((rem40 + 1e-6) / 14)));
+          for (let i = N - autoHighCount; i < N; i++) {
+            autoRate2Indices.push(i);
+          }
+        }
+      }
+      const autoVol40 = autoVol40_1;
+      const autoVol70 = autoVol70_1;
 
       const hasCustom40 = bl.customVol40 !== null && bl.customVol40 !== undefined && bl.customVol40 !== '' && Number.isFinite(Number(bl.customVol40));
       const hasCustom70 = bl.customVol70 !== null && bl.customVol70 !== undefined && bl.customVol70 !== '' && Number.isFinite(Number(bl.customVol70));
+      const hasCustom40_2 = bl.customVol40_2 !== null && bl.customVol40_2 !== undefined && bl.customVol40_2 !== '' && Number.isFinite(Number(bl.customVol40_2));
+      const hasCustom70_2 = bl.customVol70_2 !== null && bl.customVol70_2 !== undefined && bl.customVol70_2 !== '' && Number.isFinite(Number(bl.customVol70_2));
       const hasLegacyManual70 = !hasCustom40 && !hasCustom70 && bl.calcMode === 'manual' && Number(bl.manualAvg70) > 0;
-      const isManualOverride = hasCustom40 || hasCustom70 || hasLegacyManual70;
+      const hasCustomAssign = Array.isArray(bl.rate2BatchIndices);
+      const isManualOverride = hasCustom40 || hasCustom70 || hasCustom40_2 || hasCustom70_2 || hasLegacyManual70 || hasCustomAssign;
 
-      let activeVol40 = autoVol40;
-      let activeVol70 = autoVol70;
+      let activeVol40_1 = autoVol40_1;
+      let activeVol70_1 = autoVol70_1;
       if (hasCustom70 && !hasCustom40) {
-        activeVol70 = Math.max(0, Number(bl.customVol70));
-        activeVol40 = Number((activeVol70 * 70 / 40).toFixed(4));
+        activeVol70_1 = Math.max(0, Number(bl.customVol70));
+        activeVol40_1 = Number((activeVol70_1 * 70 / 40).toFixed(4));
       } else if (hasCustom40 && !hasCustom70) {
-        activeVol40 = Math.max(0, Number(bl.customVol40));
-        activeVol70 = Number((activeVol40 * 40 / 70).toFixed(4));
+        activeVol40_1 = Math.max(0, Number(bl.customVol40));
+        activeVol70_1 = Number((activeVol40_1 * 40 / 70).toFixed(4));
       } else if (hasCustom40 && hasCustom70) {
-        activeVol40 = Math.max(0, Number(bl.customVol40));
-        activeVol70 = Math.max(0, Number(bl.customVol70));
+        activeVol40_1 = Math.max(0, Number(bl.customVol40));
+        activeVol70_1 = Math.max(0, Number(bl.customVol70));
       } else if (hasLegacyManual70) {
-        activeVol70 = Math.max(0, Number(bl.manualAvg70));
-        activeVol40 = Number((activeVol70 * 70 / 40).toFixed(4));
+        activeVol70_1 = Math.max(0, Number(bl.manualAvg70));
+        activeVol40_1 = Number((activeVol70_1 * 70 / 40).toFixed(4));
       }
 
-      const base70Step = activeVol70;
-      const high70Step = activeVol70;
-      const base40Step = activeVol40;
-      const high40Step = activeVol40;
-      const countBase = N;
-      const countHigh = 0;
+      let activeVol40_2 = autoVol40_2;
+      let activeVol70_2 = autoVol70_2;
+      if (hasCustom70_2 && !hasCustom40_2) {
+        activeVol70_2 = Math.max(0, Number(bl.customVol70_2));
+        activeVol40_2 = Number((activeVol70_2 * 70 / 40).toFixed(4));
+      } else if (hasCustom40_2 && !hasCustom70_2) {
+        activeVol40_2 = Math.max(0, Number(bl.customVol40_2));
+        activeVol70_2 = Number((activeVol40_2 * 40 / 70).toFixed(4));
+      } else if (hasCustom40_2 && hasCustom70_2) {
+        activeVol40_2 = Math.max(0, Number(bl.customVol40_2));
+        activeVol70_2 = Math.max(0, Number(bl.customVol70_2));
+      }
 
-      const startNo = parseInt(bl.startBatchNo, 10) || 1;
+      const rate2BatchIndices = hasCustomAssign
+        ? [...new Set(bl.rate2BatchIndices.map((i) => parseInt(i, 10)).filter((i) => Number.isInteger(i) && i >= 0 && i < N))].sort((a, b) => a - b)
+        : (hasLegacyManual70 ? [] : [...autoRate2Indices]);
+      const rate2Set = new Set(rate2BatchIndices);
+      const rate1BatchIndices = [];
+      for (let i = 0; i < N; i++) {
+        if (!rate2Set.has(i)) rate1BatchIndices.push(i);
+      }
+      const rate1BatchNos = rate1BatchIndices.map((i) => startNo + i);
+      const rate2BatchNos = rate2BatchIndices.map((i) => startNo + i);
+      const count1 = rate1BatchIndices.length;
+      const count2 = rate2BatchIndices.length;
+      const isDualRate = count2 > 0;
+
+      const activeVol40 = activeVol40_1;
+      const activeVol70 = activeVol70_1;
+      const base70Step = activeVol70_1;
+      const high70Step = activeVol70_2;
+      const base40Step = activeVol40_1;
+      const high40Step = activeVol40_2;
+      const countBase = count1;
+      const countHigh = count2;
+
       const srcQueue = [];
       srcSpecs.forEach((s) => {
         const cnt = Math.max(0, parseInt(s.batches, 10) || 0);
@@ -2218,10 +2314,11 @@
       });
 
       for (let i = 0; i < N; i++) {
-        const vol70 = activeVol70;
-        const vol40 = activeVol40;
-        total70 += vol70;
-        total40 += vol40;
+        const isRate2 = rate2Set.has(i);
+        const vol70 = isRate2 ? activeVol70_2 : activeVol70_1;
+        const vol40 = isRate2 ? activeVol40_2 : activeVol40_1;
+        total70 = Number((total70 + vol70).toFixed(4));
+        total40 = Number((total40 + vol40).toFixed(4));
         const defaultVessel = (N % 2 === 1 && i === N - 1) ? 'H02' : (i % 2 === 0 ? 'H01' : 'H02');
         const vessel = (bl.blendingVessels && bl.blendingVessels[i]) || defaultVessel;
         const isPairSecond = (i % 2 === 1);
@@ -2237,6 +2334,7 @@
         batches.push({
           index: i,
           batchNo: startNo + i,
+          rateGroup: isRate2 ? 2 : 1,
           vessel,
           pairNo,
           isPairEnd,
@@ -2388,10 +2486,15 @@
       const teDiff = exactEndingLastTe - gaugeTe;
 
       return {
-        N, batches, total70, total40, recvDetails, tankFlow, source70Out,
+        N, startBatchNo: startNo, batches, total70, total40, recvDetails, tankFlow, source70Out,
         sumEarlierNeed, baseLast, lastBaseTe, gaugeTe, estimatedGaugeTe, isGaugeAuto, learnedAvg40,
         approxNetLast, approxTotal40, avg40Raw,
-        autoVol40, autoVol70, autoDiff: autoPair.diff, activeVol40, activeVol70, isManualOverride,
+        autoVol40, autoVol70, autoVol40_1, autoVol70_1, autoVol40_2, autoVol70_2,
+        autoDiff: autoPair.diff, activeVol40, activeVol70,
+        activeVol40_1, activeVol70_1, activeVol40_2, activeVol70_2,
+        rate1BatchIndices, rate2BatchIndices, rate1BatchNos, rate2BatchNos,
+        count1, count2, autoCount1: N - autoRate2Indices.length, autoCount2: autoRate2Indices.length,
+        isDualRate, isManualOverride,
         base70Step, base40Step, high70Step, high40Step, countBase, countHigh,
         exactNetLast, exactEndingLast, exactEndingLastTe, teDiff,
         agingTankSummaries, totalMatDoc: bl.totalMatDoc || ''
@@ -2421,7 +2524,7 @@
         const blendingPlan = computeBlendingPlan(day, currentOpening, learnedAvg40);
         if (blendingPlan.N > 0) {
           const sampleVol40 = (!blendingPlan.isGaugeAuto || blendingPlan.isManualOverride)
-            ? blendingPlan.activeVol40
+            ? Math.round(blendingPlan.total40 / blendingPlan.N)
             : (Number(day.blending?.manualAvg70) > 0 ? Math.round(Number(day.blending.manualAvg70) * 70 / 40) : 0);
           if (sampleVol40 > 0) priorAvg40Samples.push(sampleVol40);
         }
@@ -2674,7 +2777,7 @@
           amount: b.vol40,
           degree: '70° → 40°',
           sapOrder: b.sapOrder || '-',
-          note: `รหัสปรุง ${b.blendingId}${extraMat}`
+          note: `รหัสปรุง ${b.blendingId}${blendingPlan.isDualRate ? ` · ค่าที่ ${b.rateGroup}` : ''}${extraMat}`
         });
       });
 
@@ -2972,6 +3075,12 @@
             if (snEl) snEl.textContent = updated.displayName;
             const srEl = document.getElementById('sidebar-user-role');
             if (srEl) srEl.textContent = updated.role === 'admin' ? 'ผู้ดูแลระบบ (Admin)' : 'เจ้าหน้าที่ธุรการปรุงสุรา(Staff)';
+            const adminBtn = document.getElementById('admin-users-btn');
+            if (adminBtn) adminBtn.classList.toggle('hidden', updated.role !== 'admin');
+            if (updated.role !== 'admin') {
+              closeUserManagementModal();
+              renderCurrentView();
+            }
             if (localStorage.getItem(STORAGE_KEYS.SESSION)) {
               localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(updated));
             }
@@ -3337,6 +3446,9 @@
           manualAvg70: 17040,
           customVol40: null,
           customVol70: null,
+          customVol40_2: null,
+          customVol70_2: null,
+          rate2BatchIndices: null,
           totalMatDoc: '',
           tankMatDocs: {},
           sourceTanks70: [],
@@ -3463,6 +3575,9 @@
           manualAvg70: 17040,
           customVol40: null,
           customVol70: null,
+          customVol40_2: null,
+          customVol70_2: null,
+          rate2BatchIndices: null,
           totalMatDoc: '',
           tankMatDocs: {},
           sourceTanks70: [],
@@ -3834,7 +3949,7 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       showToast('Backup ข้อมูลระบบสำเร็จ', `ดาวน์โหลดไฟล์ ${a.download} แล้ว`, 'success');
     }
 
@@ -3853,8 +3968,10 @@
         try {
           const parsed = JSON.parse(String(ev.target.result || ''));
           const st = parsed?.data?.state || parsed?.state || parsed;
-          if (!st || typeof st !== 'object' || !st.days || !st.openingBalances) {
-            throw new Error('โครงสร้างไฟล์ไม่ถูกต้อง (ไม่พบ days หรือ openingBalances)');
+          if (!st || typeof st !== 'object' ||
+              !st.days || typeof st.days !== 'object' || Array.isArray(st.days) || Object.keys(st.days).length === 0 ||
+              !st.openingBalances || typeof st.openingBalances !== 'object' || Array.isArray(st.openingBalances)) {
+            throw new Error('โครงสร้างไฟล์ไม่ถูกต้อง (ไม่พบข้อมูล days หรือ openingBalances ที่สมบูรณ์)');
           }
           const dayCount = Object.keys(st.days || {}).length;
           const supplierCount = Array.isArray(st.molassesSuppliers) ? st.molassesSuppliers.length : 0;
@@ -3902,15 +4019,28 @@
             }
             if (appState.traceFilter) appState.traceFilter.date = appState.activeDate;
 
-            // Restore users safely while guaranteeing current signed-in user remains active
+            // Restore users safely (Admin only) while guaranteeing current signed-in user remains active
             const importedUsers = parsed?.data?.users;
-            if (Array.isArray(importedUsers) && importedUsers.length > 0) {
+            if (appState.currentUser?.role === 'admin' && Array.isArray(importedUsers) && importedUsers.length > 0) {
               const curU = appState.currentUser;
-              const mergedUsers = [...importedUsers];
-              if (curU && !mergedUsers.some((u) => u.username.toLowerCase() === curU.username.toLowerCase())) {
-                mergedUsers.push({ ...curU, active: true });
+              const validUsers = importedUsers
+                .filter((u) => u && typeof u.username === 'string' && u.username.trim() && typeof u.password === 'string' && u.password.length > 0)
+                .map((u) => ({
+                  username: u.username.trim(),
+                  password: u.password,
+                  role: u.role === 'admin' ? 'admin' : 'staff',
+                  displayName: String(u.displayName || u.username).trim(),
+                  active: u.active !== false
+                }));
+              if (validUsers.length > 0) {
+                const curIdx = curU ? validUsers.findIndex((u) => u.username.toLowerCase() === curU.username.toLowerCase()) : -1;
+                if (curIdx >= 0) {
+                  validUsers[curIdx] = { ...validUsers[curIdx], active: true };
+                } else if (curU) {
+                  validUsers.push({ ...curU, active: true });
+                }
+                saveUsers(validUsers);
               }
-              saveUsers(mergedUsers);
             }
 
             applyTankConfigsToMaster();
@@ -4146,6 +4276,12 @@
         appState.adminTrendFilter = { spiritType: 'สุราขาว 70 ดีกรี', mode: 'month', monthKey: '2569-11', startDate: '2569-11-01', endDate: appState.activeDate };
       }
       Object.assign(appState.adminTrendFilter, patch);
+      const tf = appState.adminTrendFilter;
+      if (tf.startDate && tf.endDate && tf.startDate > tf.endDate) {
+        const tmp = tf.startDate;
+        tf.startDate = tf.endDate;
+        tf.endDate = tmp;
+      }
       renderCurrentView();
     }
 
@@ -4277,11 +4413,11 @@
                 <div class="flex flex-wrap items-center gap-1.5 text-xs">
                   <input type="date" class="field-input text-xs font-bold py-1 px-2 w-36"
                     value="${beDateToCeIso(td.filter.startDate || '2569-11-01')}"
-                    onchange="setAdminTrendFilter({ startDate: ceIsoToBeDate(this.value) })" />
+                    onchange="if(this.value) setAdminTrendFilter({ startDate: ceIsoToBeDate(this.value) })" />
                   <span class="font-bold text-[#436152]">ถึง</span>
                   <input type="date" class="field-input text-xs font-bold py-1 px-2 w-36"
                     value="${beDateToCeIso(td.filter.endDate || appState.activeDate)}"
-                    onchange="setAdminTrendFilter({ endDate: ceIsoToBeDate(this.value) })" />
+                    onchange="if(this.value) setAdminTrendFilter({ endDate: ceIsoToBeDate(this.value) })" />
                 </div>
               `}
             </div>
@@ -5024,6 +5160,7 @@
                         <td class="py-2 px-2.5 text-center font-bold text-teal-900 whitespace-nowrap td-auto-calc">
                           #${b.batchNo}
                           <span data-out="batch-${idx}-blendingId" class="text-[10px] text-slate-500 ml-1">(${escHtml(b.blendingId)})</span>
+                          ${bp.isDualRate ? `<span class="ml-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${b.rateGroup === 2 ? 'bg-[#FFE3F2] text-[#9D115D] border border-[#FF3EA5]/40' : 'bg-[#DCF5EB] text-[#134E39] border border-[#1F8A65]/40'}">ค่า ${b.rateGroup}</span>` : ''}
                         </td>
                         <td class="py-2 px-2.5 text-center whitespace-nowrap">
                           <select data-fk="batch-${idx}-vessel" class="field-input text-xs font-bold py-1 px-2 w-20 mx-auto text-center ${b.vessel === 'H01' ? '!bg-blue-50 !text-blue-900 !border-blue-200' : '!bg-purple-50 !text-purple-900 !border-purple-200'}"
@@ -5128,6 +5265,43 @@
       `;
     }
 
+    function renderBlendingRateBatchAssignHtml(bp) {
+      if (!bp || bp.N === 0) {
+        return `<div class="text-[11px] text-slate-500 italic py-1">ระบุจำนวนถังปรุงในข้อ 3.1 เพื่อกำหนดถังปรุงสำหรับค่าที่ 1 และค่าที่ 2</div>`;
+      }
+      const r1Summary = `${bp.count1} ถัง: ${formatBatchNoRanges(bp.rate1BatchNos)}`;
+      const r2Summary = `${bp.count2} ถัง: ${formatBatchNoRanges(bp.rate2BatchNos)}`;
+      return `
+        <div class="space-y-2 pt-2 border-t border-[#1F8A65]/25">
+          <div class="flex flex-wrap items-center justify-between gap-1.5">
+            <span class="text-[11px] font-bold text-[#1B3B2B]">กำหนดถังปรุงที่ใช้ ค่าที่ 1 / ค่าที่ 2 (คลิกที่เลขถังเพื่อสลับค่า 1 ↔ ค่า 2):</span>
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="setAllBatchesRateGroup(1)" class="px-2 py-0.5 rounded-md text-[10px] font-bold border border-[#1F8A65]/40 bg-[#DCF5EB]/70 hover:bg-[#DCF5EB] text-[#134E39]">ค่า 1 ทั้งหมด</button>
+              <button type="button" onclick="setLastBatchRate2()" class="px-2 py-0.5 rounded-md text-[10px] font-bold border border-[#FF3EA5]/45 bg-[#FFE3F2]/80 hover:bg-[#FFE3F2] text-[#9D115D]">ถังสุดท้ายเป็นค่า 2</button>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            ${bp.batches.map((b) => `
+              <button type="button" onclick="toggleBatchRateGroup(${b.index})"
+                class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${b.rateGroup === 2
+                  ? 'bg-[#FFE3F2] text-[#9D115D] border-[#FF3EA5] shadow-sm hover:bg-[#FFD0EB]'
+                  : 'bg-[#DCF5EB] text-[#134E39] border-[#1F8A65]/60 hover:bg-[#C6EDD9]'}">
+                #${b.batchNo} · ค่า ${b.rateGroup}
+              </button>
+            `).join('')}
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px]">
+            <div class="px-2.5 py-1.5 rounded-lg bg-[#DCF5EB]/75 border border-[#1F8A65]/35 text-[#134E39] font-semibold">
+              <b>ค่าที่ 1</b> (${r1Summary})
+            </div>
+            <div class="px-2.5 py-1.5 rounded-lg ${bp.count2 > 0 ? 'bg-[#FFE3F2]/80 border border-[#FF3EA5]/45 text-[#9D115D]' : 'bg-white/80 border border-slate-200 text-slate-500'} font-semibold">
+              <b>ค่าที่ 2</b> (${r2Summary})
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     function renderFormView(recon) {
       const el = document.getElementById('view-form');
       const day = recon.day;
@@ -5146,8 +5320,10 @@
       const distAllocDiff = recon.distAllocatedTotal - recon.distTotal;
 
       const unit = day.blending?.volInputUnit === 'te' ? 'te' : 'L';
-      const disp70 = unit === 'te' ? Number((bp.activeVol70 / 20).toFixed(4)) : bp.activeVol70;
-      const disp40 = unit === 'te' ? Number((bp.activeVol40 / 20).toFixed(4)) : bp.activeVol40;
+      const disp70 = unit === 'te' ? Number((bp.activeVol70_1 / 20).toFixed(4)) : bp.activeVol70_1;
+      const disp40 = unit === 'te' ? Number((bp.activeVol40_1 / 20).toFixed(4)) : bp.activeVol40_1;
+      const disp70_2 = unit === 'te' ? Number((bp.activeVol70_2 / 20).toFixed(4)) : bp.activeVol70_2;
+      const disp40_2 = unit === 'te' ? Number((bp.activeVol40_2 / 20).toFixed(4)) : bp.activeVol40_2;
 
       const step1Done = (day.dispatchesToBottling || []).some((dp) => (Number(dp.toPrep1) || 0) + (Number(dp.toPrep2) || 0) > 0);
       const step2Done = (Number(day.bottling?.prep1?.discharge) || 0) > 0 || (Number(day.bottling?.prep2?.discharge) || 0) > 0;
@@ -5534,9 +5710,9 @@
             </div>
           </div>
 
-          <!-- Band 3: 3.4 Last Tank Gauge (Te) & 3.5 Auto-Calculated 70° / 40° Per Batch -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 bg-white/95 p-4 rounded-2xl border border-slate-200">
-            <div>
+          <!-- Band 3: 3.4 Last Tank Gauge (Te) & 3.5 Auto-Calculated 70° / 40° Per Batch (Dual-Rate + Batch Assignment) -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 bg-white/95 p-4 rounded-2xl border border-slate-200">
+            <div class="lg:col-span-4">
               <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
                 <label class="text-xs font-bold text-teal-800">3.4 ยอดถังบ่มถังสุดท้ายของวัน (หน่วย: เท) *</label>
                 <span data-out="bl-gauge-auto-pill" class="shrink-0">
@@ -5553,9 +5729,9 @@
                 ใช้ในสูตร: (${fmtNum(bp.gaugeTe)} − ${fmtNum(bp.lastBaseTe)}) × 20 = <b>${fmtNum(bp.approxNetLast)} L</b>${bp.isGaugeAuto ? ` · เรียนรู้เฉลี่ย ${fmtInt(bp.learnedAvg40)} L/ถัง` : ''}
               </div>
             </div>
-            <div>
+            <div class="lg:col-span-8">
               <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
-                <label class="text-xs font-bold text-slate-700">3.5 ผลคำนวณ 70° / 40° ต่อถังปรุง (จาก 3.1 + 3.3 + 3.4)</label>
+                <label class="text-xs font-bold text-slate-700">3.5 ผลคำนวณ 70° / 40° ต่อถังปรุง (จาก 3.1 + 3.3 + 3.4) · รองรับ 2 อัตราต่อวัน</label>
                 <div class="flex items-center gap-1 shrink-0">
                   <span data-out="bl-mode-badge" class="${bp.isManualOverride ? 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800' : 'badge-auto-edit'}">${bp.isManualOverride ? 'กำหนดเอง' : 'คำนวณอัตโนมัติ · แก้ได้'}</span>
                   <div class="inline-flex rounded-lg border border-slate-300 overflow-hidden text-[10px] font-bold">
@@ -5563,30 +5739,69 @@
                     <button type="button" onclick="setBlendingInputUnit('te')" class="px-1.5 py-0.5 ${unit === 'te' ? 'bg-[#1B3B2B] text-white' : 'bg-white text-slate-600'}">เท</button>
                   </div>
                   <span data-out="bl-reset-btn" class="${bp.isManualOverride ? '' : 'hidden'}">
-                    <button type="button" onclick="resetCustomBlendingVol()" class="text-[10px] font-bold text-rose-700 hover:underline">รีเซ็ต</button>
+                    <button type="button" onclick="resetCustomBlendingVol()" class="text-[10px] font-bold text-rose-700 hover:underline">รีเซ็ตอัตโนมัติ</button>
                   </span>
                 </div>
               </div>
-              <div class="p-2.5 rounded-xl bg-[#E4EFE8]/70 border border-[#1F8A65]/35 text-xs space-y-1.5">
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <span class="block text-[10px] font-bold text-amber-900 mb-0.5">70° / ถัง (${unit === 'te' ? 'เท' : 'L'})</span>
-                    <input data-fk="bl-vol70" type="number" step="any" min="0" class="field-input text-xs font-bold py-1 px-2 text-right ${!bp.isManualOverride ? 'field-auto-editable' : 'bg-white text-amber-900'}"
-                      value="${disp70}"
-                      oninput="updateCustomBlendingVol('vol70', this.value)" />
-                    <div data-out="bl-conv70" class="text-[10px] text-[#134E39] font-semibold text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol70)} L` : `${fmtNum(bp.activeVol70 / 20)} เท`}</div>
+              <div class="p-3 rounded-xl bg-[#E4EFE8]/70 border border-[#1F8A65]/35 text-xs space-y-2.5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <!-- Rate 1 Box -->
+                  <div class="p-2.5 rounded-xl bg-white/95 border border-[#1F8A65]/45 space-y-1.5">
+                    <div class="flex flex-wrap items-center justify-between gap-1">
+                      <span class="text-[11px] font-extrabold text-[#134E39]">ค่าที่ 1 (ค่าหลัก)</span>
+                      <span data-out="bl-r1-batches" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCF5EB] text-[#134E39] border border-[#1F8A65]/40">
+                        ${bp.N > 0 ? `ใช้ ${bp.count1} ถัง: ${formatBatchNoRanges(bp.rate1BatchNos)}` : '-'}
+                      </span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div>
+                        <span class="block text-[10px] font-bold text-amber-900 mb-0.5">70° / ถัง (${unit === 'te' ? 'เท' : 'L'})</span>
+                        <input data-fk="bl-vol70" type="number" step="any" min="0" class="field-input text-xs font-bold py-1 px-2 text-right ${!bp.isManualOverride ? 'field-auto-editable' : 'bg-white text-amber-900'}"
+                          value="${disp70}"
+                          oninput="updateCustomBlendingVol('vol70', this.value)" />
+                        <div data-out="bl-conv70" class="text-[10px] text-[#134E39] font-semibold text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol70_1)} L` : `${fmtNum(bp.activeVol70_1 / 20)} เท`}</div>
+                      </div>
+                      <div>
+                        <span class="block text-[10px] font-bold text-teal-900 mb-0.5">40° / ถัง (${unit === 'te' ? 'เท' : 'L'})</span>
+                        <input data-fk="bl-vol40" type="number" step="any" min="0" class="field-input text-xs font-bold py-1 px-2 text-right ${!bp.isManualOverride ? 'field-auto-editable' : 'bg-white text-teal-900'}"
+                          value="${disp40}"
+                          oninput="updateCustomBlendingVol('vol40', this.value)" />
+                        <div data-out="bl-conv40" class="text-[10px] text-[#134E39] font-semibold text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol40_1)} L` : `${fmtNum(bp.activeVol40_1 / 20)} เท`}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span class="block text-[10px] font-bold text-teal-900 mb-0.5">40° / ถัง (${unit === 'te' ? 'เท' : 'L'})</span>
-                    <input data-fk="bl-vol40" type="number" step="any" min="0" class="field-input text-xs font-bold py-1 px-2 text-right ${!bp.isManualOverride ? 'field-auto-editable' : 'bg-white text-teal-900'}"
-                      value="${disp40}"
-                      oninput="updateCustomBlendingVol('vol40', this.value)" />
-                    <div data-out="bl-conv40" class="text-[10px] text-[#134E39] font-semibold text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol40)} L` : `${fmtNum(bp.activeVol40 / 20)} เท`}</div>
+                  <!-- Rate 2 Box -->
+                  <div data-out="bl-rate2-card" class="p-2.5 rounded-xl ${bp.count2 > 0 ? 'bg-white/95 border border-[#FF3EA5]/60 shadow-sm' : 'bg-white/75 border border-dashed border-slate-300'} space-y-1.5">
+                    <div class="flex flex-wrap items-center justify-between gap-1">
+                      <span class="text-[11px] font-extrabold text-[#9D115D]">ค่าที่ 2 (ค่าปรับเศษ/ต่างอัตรา)</span>
+                      <span data-out="bl-r2-batches" class="px-2 py-0.5 rounded-full text-[10px] font-bold ${bp.count2 > 0 ? 'bg-[#FFE3F2] text-[#9D115D] border border-[#FF3EA5]/45' : 'bg-slate-100 text-slate-500 border border-slate-200'}">
+                        ${bp.N > 0 ? (bp.count2 > 0 ? `ใช้ ${bp.count2} ถัง: ${formatBatchNoRanges(bp.rate2BatchNos)}` : '0 ถัง (คลิกเลือกถังด้านล่าง)') : '-'}
+                      </span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div>
+                        <span class="block text-[10px] font-bold text-amber-900 mb-0.5">70° / ถัง (${unit === 'te' ? 'เท' : 'L'})</span>
+                        <input data-fk="bl-vol70-2" type="number" step="any" min="0" class="field-input text-xs font-bold py-1 px-2 text-right ${!bp.isManualOverride ? 'field-auto-editable' : 'bg-white text-amber-900'}"
+                          value="${disp70_2}"
+                          oninput="updateCustomBlendingVol('vol70_2', this.value)" />
+                        <div data-out="bl-conv70-2" class="text-[10px] text-[#9D115D] font-semibold text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol70_2)} L` : `${fmtNum(bp.activeVol70_2 / 20)} เท`}</div>
+                      </div>
+                      <div>
+                        <span class="block text-[10px] font-bold text-teal-900 mb-0.5">40° / ถัง (${unit === 'te' ? 'เท' : 'L'})</span>
+                        <input data-fk="bl-vol40-2" type="number" step="any" min="0" class="field-input text-xs font-bold py-1 px-2 text-right ${!bp.isManualOverride ? 'field-auto-editable' : 'bg-white text-teal-900'}"
+                          value="${disp40_2}"
+                          oninput="updateCustomBlendingVol('vol40_2', this.value)" />
+                        <div data-out="bl-conv40-2" class="text-[10px] text-[#9D115D] font-semibold text-right mt-0.5">= ${unit === 'te' ? `${fmtNum(bp.activeVol40_2)} L` : `${fmtNum(bp.activeVol40_2 / 20)} เท`}</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
+                <div data-out="bl-batch-assign-wrap">
+                  ${renderBlendingRateBatchAssignHtml(bp)}
+                </div>
                 <div data-out="bl-auto-hint" class="text-[10px] text-[#134E39] flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-[#1F8A65]/20">
-                  <span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ดิบ: ${bp.avg40Raw ? bp.avg40Raw.toFixed(2) : '0.00'} → ลงตัว (±6): <b>${fmtInt(bp.autoVol70)}</b> / <b>${fmtInt(bp.autoVol40)} L</b></span>
-                  ${Math.abs(bp.activeVol70 - Math.round(bp.activeVol70)) > 0.0001 ? '<span class="text-rose-700 font-bold">70° มีทศนิยม</span>' : ''}
+                  <span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ดิบเฉลี่ย: ${bp.avg40Raw ? bp.avg40Raw.toFixed(2) : '0.00'} → ค่า 1: <b>${fmtInt(bp.autoVol70_1)}/${fmtInt(bp.autoVol40_1)} L</b> (${bp.autoCount1} ถัง)${bp.autoCount2 > 0 ? ` + ค่า 2: <b>${fmtInt(bp.autoVol70_2)}/${fmtInt(bp.autoVol40_2)} L</b> (${bp.autoCount2} ถัง)` : ''}</span>
+                  ${(Math.abs(bp.activeVol70_1 - Math.round(bp.activeVol70_1)) > 0.0001 || (bp.count2 > 0 && Math.abs(bp.activeVol70_2 - Math.round(bp.activeVol70_2)) > 0.0001)) ? '<span class="text-rose-700 font-bold">70° มีทศนิยม</span>' : ''}
                 </div>
               </div>
             </div>
@@ -5611,8 +5826,13 @@
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-              ${(day.blending.sourceTanks70 || []).map((s, idx) => {
+              ${(() => {
+          let batchCursor = 0;
+          return (day.blending.sourceTanks70 || []).map((s, idx) => {
           const tRow = recon.tankRows[s.tankId] || { opening: 0, colF: 0, colG: 0, ending: 0, isHeld: false };
+          const cnt = Math.max(0, parseInt(s.batches, 10) || 0);
+          const rowOut70 = bp.batches.slice(batchCursor, batchCursor + cnt).reduce((acc, b) => acc + b.vol70, 0);
+          batchCursor += cnt;
           const below20k = tRow.ending < 20000;
           return `
                   <div class="p-3 rounded-xl border ${below20k ? 'border-amber-400 bg-amber-50/40' : 'border-slate-200 bg-slate-50/70'} space-y-2">
@@ -5633,7 +5853,7 @@
                       </div>
                       <div class="col-span-3 text-right rounded-lg bg-[#E4EFE8]/75 border border-[#1F8A65]/30 px-2 py-1">
                         <div class="text-[10px] font-bold text-[#134E39]">จ่ายปรุง 70° <span class="badge-auto-ro">อัตโนมัติ</span></div>
-                        <div data-out="src70-${idx}-colG" class="text-xs font-bold text-amber-900 tabular-nums">${fmtNum(tRow.colG)} L</div>
+                        <div data-out="src70-${idx}-colG" class="text-xs font-bold text-amber-900 tabular-nums">${fmtNum(rowOut70)} L</div>
                       </div>
                       <div class="col-span-1 text-right">
                         <button type="button" onclick="removeSource70Row(${idx})" class="p-1 text-rose-600 hover:bg-rose-50 rounded"><i data-lucide="x" class="w-4 h-4"></i></button>
@@ -5647,7 +5867,8 @@
                     </div>
                   </div>
                 `;
-        }).join('')}
+        }).join('');
+        })()}
             </div>
           </div>
 
@@ -5974,8 +6195,10 @@
 
       // Step 3: Blending (3.1 - 3.6)
       const unit = day.blending?.volInputUnit === 'te' ? 'te' : 'L';
-      const disp70 = unit === 'te' ? Number((bp.activeVol70 / 20).toFixed(4)) : bp.activeVol70;
-      const disp40 = unit === 'te' ? Number((bp.activeVol40 / 20).toFixed(4)) : bp.activeVol40;
+      const disp70 = unit === 'te' ? Number((bp.activeVol70_1 / 20).toFixed(4)) : bp.activeVol70_1;
+      const disp40 = unit === 'te' ? Number((bp.activeVol40_1 / 20).toFixed(4)) : bp.activeVol40_1;
+      const disp70_2 = unit === 'te' ? Number((bp.activeVol70_2 / 20).toFixed(4)) : bp.activeVol70_2;
+      const disp40_2 = unit === 'te' ? Number((bp.activeVol40_2 / 20).toFixed(4)) : bp.activeVol40_2;
 
       setHtml('bl-total-badges',
         renderSpiritBadge('สุราขาว 40 ดีกรี', 40, `ได้สุรา 40° รวม: ${fmtNum(bp.total40)} L`) +
@@ -6011,13 +6234,30 @@
 
       setFkVal('bl-vol70', disp70);
       setFkVal('bl-vol40', disp40);
-      const v70Inp = formEl.querySelector('[data-fk="bl-vol70"]');
-      const v40Inp = formEl.querySelector('[data-fk="bl-vol40"]');
-      if (v70Inp) v70Inp.classList.toggle('field-auto-editable', !bp.isManualOverride);
-      if (v40Inp) v40Inp.classList.toggle('field-auto-editable', !bp.isManualOverride);
-      setText('bl-conv70', `= ${unit === 'te' ? `${fmtNum(bp.activeVol70)} L` : `${fmtNum(bp.activeVol70 / 20)} เท`}`);
-      setText('bl-conv40', `= ${unit === 'te' ? `${fmtNum(bp.activeVol40)} L` : `${fmtNum(bp.activeVol40 / 20)} เท`}`);
-      setHtml('bl-auto-hint', `<span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ดิบ: ${bp.avg40Raw ? bp.avg40Raw.toFixed(2) : '0.00'} → ลงตัว (±6): <b>${fmtInt(bp.autoVol70)}</b> / <b>${fmtInt(bp.autoVol40)} L</b></span>${Math.abs(bp.activeVol70 - Math.round(bp.activeVol70)) > 0.0001 ? '<span class="text-rose-700 font-bold">70° มีทศนิยม</span>' : ''}`);
+      setFkVal('bl-vol70-2', disp70_2);
+      setFkVal('bl-vol40-2', disp40_2);
+      ['bl-vol70', 'bl-vol40', 'bl-vol70-2', 'bl-vol40-2'].forEach((fkName) => {
+        const elInp = formEl.querySelector(`[data-fk="${fkName}"]`);
+        if (elInp) elInp.classList.toggle('field-auto-editable', !bp.isManualOverride);
+      });
+      setText('bl-conv70', `= ${unit === 'te' ? `${fmtNum(bp.activeVol70_1)} L` : `${fmtNum(bp.activeVol70_1 / 20)} เท`}`);
+      setText('bl-conv40', `= ${unit === 'te' ? `${fmtNum(bp.activeVol40_1)} L` : `${fmtNum(bp.activeVol40_1 / 20)} เท`}`);
+      setText('bl-conv70-2', `= ${unit === 'te' ? `${fmtNum(bp.activeVol70_2)} L` : `${fmtNum(bp.activeVol70_2 / 20)} เท`}`);
+      setText('bl-conv40-2', `= ${unit === 'te' ? `${fmtNum(bp.activeVol40_2)} L` : `${fmtNum(bp.activeVol40_2 / 20)} เท`}`);
+
+      setText('bl-r1-batches', bp.N > 0 ? `ใช้ ${bp.count1} ถัง: ${formatBatchNoRanges(bp.rate1BatchNos)}` : '-');
+      const r2Badge = formEl.querySelector('[data-out="bl-r2-batches"]');
+      if (r2Badge) {
+        r2Badge.className = `px-2 py-0.5 rounded-full text-[10px] font-bold ${bp.count2 > 0 ? 'bg-[#FFE3F2] text-[#9D115D] border border-[#FF3EA5]/45' : 'bg-slate-100 text-slate-500 border border-slate-200'}`;
+        r2Badge.textContent = bp.N > 0 ? (bp.count2 > 0 ? `ใช้ ${bp.count2} ถัง: ${formatBatchNoRanges(bp.rate2BatchNos)}` : '0 ถัง (คลิกเลือกถังด้านล่าง)') : '-';
+      }
+      const r2Card = formEl.querySelector('[data-out="bl-rate2-card"]');
+      if (r2Card) {
+        r2Card.className = `p-2.5 rounded-xl ${bp.count2 > 0 ? 'bg-white/95 border border-[#FF3EA5]/60 shadow-sm' : 'bg-white/75 border border-dashed border-slate-300'} space-y-1.5`;
+      }
+      setHtml('bl-batch-assign-wrap', renderBlendingRateBatchAssignHtml(bp));
+      const decWarn = Math.abs(bp.activeVol70_1 - Math.round(bp.activeVol70_1)) > 0.0001 || (bp.count2 > 0 && Math.abs(bp.activeVol70_2 - Math.round(bp.activeVol70_2)) > 0.0001);
+      setHtml('bl-auto-hint', `<span><span class="badge-auto-ro mr-1">อัตโนมัติ</span> ดิบเฉลี่ย: ${bp.avg40Raw ? bp.avg40Raw.toFixed(2) : '0.00'} → ค่า 1: <b>${fmtInt(bp.autoVol70_1)}/${fmtInt(bp.autoVol40_1)} L</b> (${bp.autoCount1} ถัง)${bp.autoCount2 > 0 ? ` + ค่า 2: <b>${fmtInt(bp.autoVol70_2)}/${fmtInt(bp.autoVol40_2)} L</b> (${bp.autoCount2} ถัง)` : ''}</span>${decWarn ? '<span class="text-rose-700 font-bold">70° มีทศนิยม</span>' : ''}`);
 
       // 3.6 Source 70° tanks
       const sumSrcBatches = (day.blending.sourceTanks70 || []).reduce((acc, s) => acc + (parseInt(s.batches, 10) || 0), 0);
@@ -6027,11 +6267,15 @@
         srcHintEl.className = `badge-single-line px-2 py-0.5 rounded-full text-[10px] font-bold border ${srcBatchDiff === 0 ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300'}`;
         srcHintEl.textContent = srcBatchDiff === 0 ? `✓ ครบ ${bp.N} ถังปรุงตามข้อ 3.1` : `⚠️ รวม ${sumSrcBatches} ถัง (ข้อ 3.1 = ${bp.N} ถัง)`;
       }
+      let srcBatchCursor = 0;
       (day.blending.sourceTanks70 || []).forEach((s, idx) => {
         const tRow = recon.tankRows[s.tankId] || { opening: 0, colF: 0, colG: 0, ending: 0 };
+        const cnt = Math.max(0, parseInt(s.batches, 10) || 0);
+        const rowOut70 = bp.batches.slice(srcBatchCursor, srcBatchCursor + cnt).reduce((acc, b) => acc + b.vol70, 0);
+        srcBatchCursor += cnt;
         const below20k = tRow.ending < 20000;
         setFkVal(`src70-${idx}-batches`, s.batches);
-        setText(`src70-${idx}-colG`, `${fmtNum(tRow.colG)} L`);
+        setText(`src70-${idx}-colG`, `${fmtNum(rowOut70)} L`);
         setHtml(`src70-${idx}-meta`, `<span class="badge-auto-ro mr-1">อัตโนมัติ</span> ยกมา: <b>${fmtNum(tRow.opening)} L</b> ${tRow.colF > 0 ? `· รับโอนวันนี้: <b class="text-cyan-700">+${fmtNum(tRow.colF)} L</b>` : ''}`);
         const endEl = formEl.querySelector(`[data-out="src70-${idx}-ending"]`);
         if (endEl) {
@@ -6211,6 +6455,9 @@
       day.blending.calcMode = 'formula';
       day.blending.customVol40 = null;
       day.blending.customVol70 = null;
+      day.blending.customVol40_2 = null;
+      day.blending.customVol70_2 = null;
+      day.blending.rate2BatchIndices = null;
       patchFormCalculatedOutputs({ rebuildBlendingTables: true });
     }
 
@@ -6276,6 +6523,9 @@
         if (Array.isArray(day.blending.sapOrders)) day.blending.sapOrders = day.blending.sapOrders.slice(0, newN);
         if (Array.isArray(day.blending.matDocOrders)) day.blending.matDocOrders = day.blending.matDocOrders.slice(0, newN);
         if (Array.isArray(day.blending.blendingIds)) day.blending.blendingIds = day.blending.blendingIds.slice(0, newN);
+        if (Array.isArray(day.blending.rate2BatchIndices)) {
+          day.blending.rate2BatchIndices = day.blending.rate2BatchIndices.filter((i) => i >= 0 && i < newN);
+        }
         const src70 = day.blending.sourceTanks70 || [];
         if (src70.length === 1) {
           src70[0].batches = newN;
@@ -6315,6 +6565,9 @@
         day.blending.calcMode = 'formula';
         day.blending.customVol40 = null;
         day.blending.customVol70 = null;
+        day.blending.customVol40_2 = null;
+        day.blending.customVol70_2 = null;
+        day.blending.rate2BatchIndices = null;
         patchFormCalculatedOutputs({ rebuildBlendingTables: true });
         return;
       }
@@ -6325,10 +6578,16 @@
     function updateCustomBlendingVol(which, val) {
       const day = appState.days[appState.activeDate];
       if (!day.blending) return;
+      const isRate2 = which === 'vol40_2' || which === 'vol70_2';
       const trimmed = String(val ?? '').trim();
       if (trimmed === '') {
-        day.blending.customVol40 = null;
-        day.blending.customVol70 = null;
+        if (isRate2) {
+          day.blending.customVol40_2 = null;
+          day.blending.customVol70_2 = null;
+        } else {
+          day.blending.customVol40 = null;
+          day.blending.customVol70 = null;
+        }
         patchFormCalculatedOutputs({ rebuildBlendingTables: true });
         return;
       }
@@ -6336,15 +6595,68 @@
       if (!Number.isFinite(num) || num < 0) return;
       const unit = day.blending.volInputUnit === 'te' ? 'te' : 'L';
       const numL = unit === 'te' ? num * 20 : num;
+      const roundedL = Math.abs(numL - Math.round(numL)) < 1e-6 ? Math.round(numL) : Number(numL.toFixed(4));
       if (which === 'vol40') {
-        day.blending.customVol40 = Number(numL.toFixed(4));
+        day.blending.customVol40 = roundedL;
         const calc70 = numL * 40 / 70;
         day.blending.customVol70 = Math.abs(calc70 - Math.round(calc70)) < 1e-6 ? Math.round(calc70) : Number(calc70.toFixed(4));
-      } else {
-        day.blending.customVol70 = Number(numL.toFixed(4));
+      } else if (which === 'vol70') {
+        day.blending.customVol70 = roundedL;
         const calc40 = numL * 70 / 40;
         day.blending.customVol40 = Math.abs(calc40 - Math.round(calc40)) < 1e-6 ? Math.round(calc40) : Number(calc40.toFixed(4));
+      } else if (which === 'vol40_2') {
+        day.blending.customVol40_2 = roundedL;
+        const calc70 = numL * 40 / 70;
+        day.blending.customVol70_2 = Math.abs(calc70 - Math.round(calc70)) < 1e-6 ? Math.round(calc70) : Number(calc70.toFixed(4));
+      } else if (which === 'vol70_2') {
+        day.blending.customVol70_2 = roundedL;
+        const calc40 = numL * 70 / 40;
+        day.blending.customVol40_2 = Math.abs(calc40 - Math.round(calc40)) < 1e-6 ? Math.round(calc40) : Number(calc40.toFixed(4));
       }
+      if (isRate2 && numL > 0) {
+        const recon = computeDayReconciliation(appState.activeDate);
+        const curBp = recon?.blendingPlan;
+        if (curBp && curBp.N > 0 && curBp.count2 === 0) {
+          day.blending.rate2BatchIndices = [curBp.N - 1];
+        }
+      }
+      patchFormCalculatedOutputs({ rebuildBlendingTables: true });
+    }
+
+    function toggleBatchRateGroup(batchIdx) {
+      const day = appState.days[appState.activeDate];
+      if (!day?.blending) return;
+      const recon = computeDayReconciliation(appState.activeDate);
+      const bp = recon?.blendingPlan;
+      const N = bp?.N || 0;
+      if (batchIdx < 0 || batchIdx >= N) return;
+      const curList = Array.isArray(day.blending.rate2BatchIndices)
+        ? [...day.blending.rate2BatchIndices]
+        : [...(bp?.rate2BatchIndices || [])];
+      const set = new Set(curList.filter((i) => i >= 0 && i < N));
+      if (set.has(batchIdx)) set.delete(batchIdx);
+      else set.add(batchIdx);
+      day.blending.rate2BatchIndices = [...set].sort((a, b) => a - b);
+      patchFormCalculatedOutputs({ rebuildBlendingTables: true });
+    }
+
+    function setAllBatchesRateGroup(group) {
+      const day = appState.days[appState.activeDate];
+      if (!day?.blending) return;
+      const N = Math.max(0, parseInt(day.blending.batchCount, 10) || 0);
+      if (group === 2) {
+        day.blending.rate2BatchIndices = Array.from({ length: N }, (_, i) => i);
+      } else {
+        day.blending.rate2BatchIndices = [];
+      }
+      patchFormCalculatedOutputs({ rebuildBlendingTables: true });
+    }
+
+    function setLastBatchRate2() {
+      const day = appState.days[appState.activeDate];
+      if (!day?.blending) return;
+      const N = Math.max(0, parseInt(day.blending.batchCount, 10) || 0);
+      day.blending.rate2BatchIndices = N > 0 ? [N - 1] : [];
       patchFormCalculatedOutputs({ rebuildBlendingTables: true });
     }
 
@@ -6354,6 +6666,9 @@
       day.blending.calcMode = 'formula';
       day.blending.customVol40 = null;
       day.blending.customVol70 = null;
+      day.blending.customVol40_2 = null;
+      day.blending.customVol70_2 = null;
+      day.blending.rate2BatchIndices = null;
       patchFormCalculatedOutputs({ rebuildBlendingTables: true });
     }
 
@@ -6379,8 +6694,15 @@
       if (field === 'batches') {
         row.batches = Math.max(0, Math.min(30, parseInt(val, 10) || 0));
       } else {
-        if (field === 'tankId' && appState.holdTanks[val]?.held) {
-          showToast(`ถัง ${val} ติดสถานะ Hold`, 'กรุณาข้ามถังนี้หรือปลด Hold ก่อนนำมาใช้งาน', 'warning');
+        if (field === 'tankId') {
+          if ((day.blending.sourceTanks70 || []).some((s, i) => i !== idx && s.tankId === val)) {
+            showToast(`ถัง ${val} ถูกเลือกไว้แล้ว`, 'กรุณาเลือกถัง 70° อื่นที่ไม่ซ้ำกัน', 'warning');
+            scheduleFormRefresh(true);
+            return;
+          }
+          if (appState.holdTanks[val]?.held) {
+            showToast(`ถัง ${val} ติดสถานะ Hold`, 'กรุณาข้ามถังนี้หรือปลด Hold ก่อนนำมาใช้งาน', 'warning');
+          }
         }
         row[field] = val;
       }
@@ -6459,25 +6781,37 @@
       const day = appState.days[appState.activeDate];
       const N = parseInt(day.blending?.batchCount, 10) || 0;
       if (N <= 0) return;
-      if (!Array.isArray(day.blending.blendingVessels)) day.blending.blendingVessels = [];
-      if (!Array.isArray(day.blending.sapOrders)) day.blending.sapOrders = [];
-      if (!Array.isArray(day.blending.matDocOrders)) day.blending.matDocOrders = [];
-      if (!Array.isArray(day.blending.blendingIds)) day.blending.blendingIds = [];
+      day.blending.blendingVessels = (Array.isArray(day.blending.blendingVessels) ? day.blending.blendingVessels : []).slice(0, N);
+      day.blending.sapOrders = (Array.isArray(day.blending.sapOrders) ? day.blending.sapOrders : []).slice(0, N);
+      day.blending.matDocOrders = (Array.isArray(day.blending.matDocOrders) ? day.blending.matDocOrders : []).slice(0, N);
+      day.blending.blendingIds = (Array.isArray(day.blending.blendingIds) ? day.blending.blendingIds : []).slice(0, N);
 
-      const baseSap = parseInt(day.blending.sapOrders[0], 10) || 2930068816;
-      const firstPairMatDoc = parseInt(day.blending.matDocOrders[1] || day.blending.matDocOrders[0], 10) || 2920291015;
+      const firstSapNum = day.blending.sapOrders.map((v) => parseInt(v, 10)).find((n) => Number.isFinite(n) && n > 0);
+      let lastSap = (firstSapNum || 2930068816) - 1;
+      const firstMatNum = day.blending.matDocOrders.map((v) => parseInt(v, 10)).find((n) => Number.isFinite(n) && n > 0);
+      let lastMat = (firstMatNum || 2920291015) - 1;
 
       for (let i = 0; i < N; i++) {
         const isOddLast = (N % 2 === 1) && (i === N - 1);
         const isPairEnd = (i % 2 === 1) || isOddLast;
-        const pairNo = Math.floor(i / 2);
         day.blending.blendingVessels[i] = isOddLast ? 'H02' : (i % 2 === 0 ? 'H01' : 'H02');
-        if (!day.blending.sapOrders[i]) {
-          day.blending.sapOrders[i] = String(baseSap + i);
+        const curSap = String(day.blending.sapOrders[i] || '').trim();
+        const curSapNum = parseInt(curSap, 10);
+        if (curSap && Number.isFinite(curSapNum)) {
+          lastSap = Math.max(lastSap, curSapNum);
+        } else if (!curSap) {
+          lastSap += 1;
+          day.blending.sapOrders[i] = String(lastSap);
         }
-        day.blending.blendingIds[i] = day.blending.sapOrders[i].slice(-5);
-        if (isPairEnd && !day.blending.matDocOrders[i]) {
-          day.blending.matDocOrders[i] = String(firstPairMatDoc + pairNo);
+        day.blending.blendingIds[i] = String(day.blending.sapOrders[i] || '').slice(-5);
+
+        const curMat = String(day.blending.matDocOrders[i] || '').trim();
+        const curMatNum = parseInt(curMat, 10);
+        if (curMat && Number.isFinite(curMatNum)) {
+          lastMat = Math.max(lastMat, curMatNum);
+        } else if (isPairEnd && !curMat) {
+          lastMat += 1;
+          day.blending.matDocOrders[i] = String(lastMat);
         }
       }
       saveAppState();
@@ -6588,13 +6922,25 @@
       if (!s) return;
       const newName = document.getElementById(`mol-edit-name-${idx}`)?.value?.trim();
       const newNote = document.getElementById(`mol-edit-note-${idx}`)?.value?.trim() || '';
-      if (!newName) return;
+      if (!newName) {
+        showToast('กรุณาระบุชื่อบริษัท', '', 'warning');
+        return;
+      }
+      if (appState.molassesSuppliers.some((other, i) => i !== idx && other.name.trim().toLowerCase() === newName.toLowerCase())) {
+        showToast('ชื่อบริษัทซ้ำ', `มีชื่อบริษัท "${newName}" อยู่ในรายการแล้ว`, 'warning');
+        return;
+      }
       const oldName = s.name;
       s.name = newName;
       s.note = newNote;
       Object.values(appState.days).forEach((d) => {
         if (d?.distillation?.molassesSupplier === oldName) {
           d.distillation.molassesSupplier = newName;
+        }
+      });
+      Object.values(appState.tankLotHistory || {}).forEach((lh) => {
+        if (lh && lh.molassesSupplier === oldName) {
+          lh.molassesSupplier = newName;
         }
       });
       saveAppState();
@@ -6627,6 +6973,11 @@
         row.amount = Math.max(0, parseFloat(val) || 0);
         patchFormCalculatedOutputs({ rebuildBlendingTables: false, patchSelects: true });
       } else {
+        if (day.distillation.targetTanks.some((t, i) => i !== idx && t.tankId === val)) {
+          showToast(`ถัง ${val} ถูกเลือกไว้แล้ว`, 'กรุณาเลือกถังรับกลั่นอื่นที่ไม่ซ้ำกัน', 'warning');
+          scheduleFormRefresh(true);
+          return;
+        }
         if (appState.holdTanks[val]?.held) {
           showToast(`ถัง ${val} ติดสถานะ Hold`, 'กรุณาข้ามถังนี้หรือปลด Hold ก่อนนำมาใช้งาน', 'warning');
         }
@@ -6687,7 +7038,11 @@
       while (remaining > 0.01) {
         const nextTank = MASTER_TANKS.find((t) => t.building === 'aging' && !used.has(t.id) && !appState.holdTanks[t.id]?.held);
         if (!nextTank) {
-          newTargets[newTargets.length - 1].amount = Number((newTargets[newTargets.length - 1].amount + remaining).toFixed(2));
+          if (newTargets.length > 0) {
+            newTargets[newTargets.length - 1].amount = Number((newTargets[newTargets.length - 1].amount + remaining).toFixed(2));
+          } else {
+            newTargets.push({ tankId: '640/6', amount: Number(remaining.toFixed(2)) });
+          }
           remaining = 0;
           break;
         }
@@ -6792,7 +7147,9 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-200">
-                ${recon.transactions.map((tx) => `
+                ${recon.transactions.length === 0 ? `
+                  <tr><td colspan="8" class="py-6 text-center text-slate-400">ยังไม่มีรายการเคลื่อนไหว (Transaction) ในวันนี้</td></tr>
+                ` : recon.transactions.map((tx) => `
                   <tr class="hover:bg-[#EFE6D1]/40">
                     <td class="py-2 px-3 font-bold text-[#1B3B2B] whitespace-nowrap">${escHtml(tx.id)}</td>
                     <td class="py-2 px-3 whitespace-nowrap">
@@ -6858,7 +7215,9 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-200">
-                ${allTanks.map((t) => `
+                ${allTanks.length === 0 ? `
+                  <tr><td colspan="13" class="py-6 text-center text-slate-400">ไม่พบถังที่ตรงตามตัวกรอง/คำค้นหา</td></tr>
+                ` : allTanks.map((t) => `
                   <tr class="${t.badges.length > 0 ? 'bg-blue-50/30 font-semibold' : 'bg-white'} hover:bg-blue-50/60 cursor-pointer" onclick="openTankDetailModal('${escHtml(t.id)}')">
                     <td class="py-2 px-2.5 font-bold text-slate-900 whitespace-nowrap">${escHtml(t.id)}</td>
                     <td class="py-2 px-2 text-center text-slate-500 whitespace-nowrap">${escHtml(t.sapLoc)}</td>
@@ -6996,7 +7355,11 @@
         const circleBadge = recvIdx >= 0 ? `<span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-rose-600 text-white text-[10px] font-bold mr-1">${recvIdx + 1}</span>` : '';
         let noteHtml = '';
         if (idx === 0) noteHtml = `<span class="font-bold text-slate-800">70° / ${fmtNum(recon.summary70.ending)}</span>`;
-        if (idx === 4 && bp.N > 0) noteHtml = `<span class="px-1.5 py-0.5 rounded bg-rose-50 border border-rose-300 text-rose-900 font-bold">${fmtInt(bp.N)} ถัง: ${fmtNum(bp.activeVol70)} / ${fmtNum(bp.activeVol40)}</span>`;
+        if (idx === 4 && bp.N > 0) {
+          noteHtml = bp.isDualRate
+            ? `<span class="px-1.5 py-0.5 rounded bg-rose-50 border border-rose-300 text-rose-900 font-bold">ค่า 1 (${fmtInt(bp.count1)} ถัง ${escHtml(formatBatchNoRanges(bp.rate1BatchNos))}): ${fmtNum(bp.activeVol70_1)}/${fmtNum(bp.activeVol40_1)} · ค่า 2 (${fmtInt(bp.count2)} ถัง ${escHtml(formatBatchNoRanges(bp.rate2BatchNos))}): ${fmtNum(bp.activeVol70_2)}/${fmtNum(bp.activeVol40_2)}</span>`
+            : `<span class="px-1.5 py-0.5 rounded bg-rose-50 border border-rose-300 text-rose-900 font-bold">${fmtInt(bp.N)} ถัง: ${fmtNum(bp.activeVol70_1)} / ${fmtNum(bp.activeVol40_1)}</span>`;
+        }
         if (idx === 7) noteHtml = `<span class="font-bold text-teal-900">40° / ${fmtNum(bp.total40)}</span>`;
         if (idx === 8) noteHtml = `<span class="font-bold text-amber-900">70° / ${fmtNum(bp.total70)}</span>`;
         if (r.id === lastTid && recvIds.length > 0) {
@@ -7055,7 +7418,12 @@
                   <div class="text-slate-500">ไม่มีรายการปรุงสุราในวันนี้</div>
                 ` : `
                   <div>• ยอดถังสุดท้ายเพิ่ม: <b>${fmtNum(bp.approxNetLast)} L</b> · รวม 40° ดิบ: <b>${fmtNum(bp.approxTotal40)} L</b> ÷ ${bp.N} = <b>${bp.avg40Raw.toFixed(2)}</b></div>
-                  <div>• ปรับลงตัว ×40/70 (±6): <b>${fmtNum(bp.activeVol40)} L (40°)</b> × 40/70 = <b>${fmtNum(bp.activeVol70)} L (70°)</b>${bp.isManualOverride ? ' (กำหนดเอง)' : ''}</div>
+                  ${bp.isDualRate ? `
+                    <div>• <b>ค่าที่ 1</b> (${bp.count1} ถัง: ${escHtml(formatBatchNoRanges(bp.rate1BatchNos))}): <b>${fmtNum(bp.activeVol70_1)} L (70°)</b> → <b>${fmtNum(bp.activeVol40_1)} L (40°)</b></div>
+                    <div>• <b>ค่าที่ 2</b> (${bp.count2} ถัง: ${escHtml(formatBatchNoRanges(bp.rate2BatchNos))}): <b>${fmtNum(bp.activeVol70_2)} L (70°)</b> → <b>${fmtNum(bp.activeVol40_2)} L (40°)</b>${bp.isManualOverride ? ' (ปรับ/กำหนดเอง)' : ''}</div>
+                  ` : `
+                    <div>• ปรับลงตัว ×40/70: <b>${fmtNum(bp.activeVol40_1)} L (40°)</b> × 40/70 = <b>${fmtNum(bp.activeVol70_1)} L (70°)</b>${bp.isManualOverride ? ' (กำหนดเอง)' : ''}</div>
+                  `}
                   <div>• รับจริงถัง ${escHtml(lastTid)}: ${fmtNum(bp.total40)} − ${fmtNum(bp.sumEarlierNeed)} = <b>${fmtNum(bp.exactNetLast)} L</b> (คงเหลือ <b>${fmtNum(bp.exactEndingLast)} L = ${fmtNum(bp.exactEndingLastTe)} เท</b>)</div>
                 `}
               </div>
@@ -7097,8 +7465,8 @@
                   </tr>
 
                   <!-- 70° Source Tanks in Building 110 -->
-                  ${(day.blending.sourceTanks70 || []).map((s) => {
-        const r = recon.tankRows[s.tankId];
+                  ${[...new Set((day.blending.sourceTanks70 || []).map((s) => s.tankId).filter(Boolean))].map((tid70) => {
+        const r = recon.tankRows[tid70];
         if (!r) return '';
         const afterBlendOnly = r.opening - r.colG;
         return `
@@ -7215,10 +7583,12 @@
                   </tr>
                 </thead>
                 <tbody>
-                  ${bp.batches.map((b, idx) => `
+                  ${bp.N === 0 ? `
+                    <tr><td colspan="9" class="text-center py-3 text-slate-400">ไม่มีรายการปรุงสุราในวันนี้</td></tr>
+                  ` : bp.batches.map((b, idx) => `
                     <tr>
                       <td class="whitespace-nowrap">${idx === 0 ? escHtml(day.date) : '"'}</td>
-                      <td class="text-center font-bold text-teal-900">${b.batchNo}<div class="text-[10px] text-rose-700">(${escHtml(b.blendingId)})</div></td>
+                      <td class="text-center font-bold text-teal-900">${b.batchNo}<div class="text-[10px] text-rose-700">(${escHtml(b.blendingId)})</div>${bp.isDualRate ? `<div class="text-[9px] font-bold ${b.rateGroup === 2 ? 'text-[#9D115D]' : 'text-[#134E39]'}">ค่า ${b.rateGroup}</div>` : ''}</td>
                       <td class="text-right tabular-nums font-bold">${fmtNum(b.vol70)}</td>
                       <td class="text-center font-bold">${escHtml(b.source70Tank)}</td>
                       <td class="text-center font-bold ${b.vessel === 'H01' ? 'text-blue-800' : 'text-purple-800'}">${escHtml(b.vessel || 'H01')}</td>
@@ -7238,7 +7608,7 @@
                     <td class="text-right tabular-nums text-amber-900">${fmtNum(bp.total70)}</td>
                     <td colspan="4" class="text-right">รวมน้ำสุรา 40° ที่ปรุงได้ทั้งหมด:</td>
                     <td class="text-right tabular-nums text-teal-900">${fmtNum(bp.total40)}</td>
-                    <td class="text-[11px]">${fmtInt(bp.N)} × (${fmtNum(bp.activeVol70)} / ${fmtNum(bp.activeVol40)})${bp.totalMatDoc ? ` · <span class="text-rose-800 font-bold">MatDoc: ${escHtml(bp.totalMatDoc)}</span>` : ''}</td>
+                    <td class="text-[11px]">${bp.N === 0 ? '-' : (bp.isDualRate ? `${fmtInt(bp.count1)}×(${fmtNum(bp.activeVol70_1)}/${fmtNum(bp.activeVol40_1)}) + ${fmtInt(bp.count2)}×(${fmtNum(bp.activeVol70_2)}/${fmtNum(bp.activeVol40_2)})` : `${fmtInt(bp.N)} × (${fmtNum(bp.activeVol70_1)} / ${fmtNum(bp.activeVol40_1)})`)}${bp.totalMatDoc ? ` · <span class="text-rose-800 font-bold">MatDoc: ${escHtml(bp.totalMatDoc)}</span>` : ''}</td>
                   </tr>
                 </tbody>
               </table>
@@ -7517,6 +7887,10 @@
 
     function computePctLiquorMetrics(recon) {
       const cfg = { ...DEFAULT_PCT_LIQUOR_CONFIG, ...(appState.pctLiquorConfig || {}) };
+      const reconMonthNum = Math.max(1, Math.min(12, parseInt(String(recon.dateKey || '').split('-')[1], 10) || 11));
+      if (!appState.pctLiquorConfig?.monthNameManual) {
+        cfg.monthName = THAI_MONTHS_FULL[reconMonthNum - 1];
+      }
       const e2TotalCap100 = Number(cfg.totalCap100) || 24543000;
       const e3Actual70 = Number(recon.summary70.ending) || 0;
       const g3Equiv40From70 = e3Actual70 * 70 / 40;
@@ -7547,12 +7921,16 @@
       const e17Cap40 = list40.reduce((s, r) => s + (Number(r.workingVol) || 0), 0) || 1560000;
       const autoCap100 = (e14Cap70 * 70 / 40) + e17Cap40;
 
+      const cutoffDate = recon.dateKey || appState.activeDate;
       const timelineMap = {};
       EXCEL_YOD_RAY_WAN_HISTORY.forEach((h) => {
         const dKey = `2569-11-${String(h.day).padStart(2, '0')}`;
-        timelineMap[dKey] = { bottle40: Number(h.i40) || 0, blend70: Number(h.y70) || 0 };
+        if (!cutoffDate || dKey <= cutoffDate) {
+          timelineMap[dKey] = { bottle40: Number(h.i40) || 0, blend70: Number(h.y70) || 0 };
+        }
       });
       getSortedDates().forEach((dKey) => {
+        if (cutoffDate && dKey > cutoffDate) return;
         const r = computeDayReconciliation(dKey);
         if (r) {
           timelineMap[dKey] = {
@@ -7576,8 +7954,8 @@
         const heelPerTank = (r.building === 'b110' && r.workingVol < 150000) ? 8000 : 20000;
         return s + Math.min(Math.max(0, r.ending), heelPerTank);
       }, 0);
-      const autoSlow70 = Object.values(recon.tankRows)
-        .filter((r) => r.degree >= 70 && (r.isHeld || r.spiritType !== 'สุราขาว 70 ดีกรี'))
+      const autoSlow70 = list70
+        .filter((r) => r.isHeld || r.spiritType !== 'สุราขาว 70 ดีกรี')
         .reduce((s, r) => s + Math.max(0, r.ending), 0);
       const autoAvgBlend70 = sumBlend70 > 0 ? (sumBlend70 / dayCount) * 30 : o11AvgBlend70;
       const autoNetUsable70 = Math.max(0, e3Actual70 - autoHeel70 - autoSlow70);
@@ -7608,7 +7986,11 @@
 
     function updatePctLiquorField(field, val) {
       if (!appState.pctLiquorConfig) appState.pctLiquorConfig = structuredCloneSafe(DEFAULT_PCT_LIQUOR_CONFIG);
-      if (field === 'monthName' || field === 'revision') {
+      if (field === 'monthName') {
+        const trimmed = String(val ?? '').trim();
+        appState.pctLiquorConfig.monthName = trimmed || DEFAULT_PCT_LIQUOR_CONFIG.monthName;
+        appState.pctLiquorConfig.monthNameManual = Boolean(trimmed);
+      } else if (field === 'revision') {
         appState.pctLiquorConfig[field] = val;
       } else {
         appState.pctLiquorConfig[field] = parseFloat(val) || 0;
@@ -7959,10 +8341,14 @@
         return;
       }
 
-      const wb = XLSX.utils.book_new();
       const sortedDates = getSortedDates();
-      const allRecons = sortedDates.map((dKey) => computeDayReconciliation(dKey));
-      const activeRecon = computeDayReconciliation(appState.activeDate);
+      const allRecons = sortedDates.map((dKey) => computeDayReconciliation(dKey)).filter(Boolean);
+      const activeRecon = computeDayReconciliation(appState.activeDate) || allRecons[allRecons.length - 1];
+      if (!activeRecon || allRecons.length === 0) {
+        showToast('ไม่มีข้อมูลสำหรับ Export', 'กรุณาบันทึกข้อมูลอย่างน้อย 1 วันก่อน Export', 'warning');
+        return;
+      }
+      const wb = XLSX.utils.book_new();
 
       const actParts = String(appState.activeDate || '2569-11-17').split('-');
       const actYear = parseInt(actParts[0], 10) || 2569;
@@ -8100,7 +8486,10 @@
         bmAoa.push([`${s.tankShort}(${s.batchCount})`, s.tankId, Number(s.total40.toFixed(2)), s.matDoc || '-', `ปรุง ${s.batchCount} ถัง`, '', '', '']);
       });
       bmTotalRows.push(bmAoa.length);
-      bmAoa.push([`40° รวมทุกถัง (${abp.N} ถัง)`, '-', Number(abp.total40.toFixed(2)), abp.totalMatDoc || '-', `ใช้ 70° รวม ${fmtNum(abp.total70)} L`, '', '', '']);
+      const bmRateNote = abp.isDualRate
+        ? `ใช้ 70° รวม ${fmtNum(abp.total70)} L (ค่า 1: ${abp.count1}×${fmtNum(abp.activeVol40_1)}L + ค่า 2: ${abp.count2}×${fmtNum(abp.activeVol40_2)}L)`
+        : `ใช้ 70° รวม ${fmtNum(abp.total70)} L`;
+      bmAoa.push([`40° รวมทุกถัง (${abp.N} ถัง)`, '-', Number(abp.total40.toFixed(2)), abp.totalMatDoc || '-', bmRateNote, '', '', '']);
       bmAoa.push([]);
       bmHeaderRows.push(bmAoa.length);
       bmAoa.push(['ถังปรุงที่', 'ถังผสม (H01/H02)', 'จากถัง 70°', 'ใช้ 70° (L)', 'ได้ 40° (L)', 'ลงถังบ่ม 40°', 'SAP Order', 'เลข MatDoc']);
@@ -8361,6 +8750,14 @@
         }
       ];
 
+      const sortedDates = getSortedDates();
+      const targetIdx = sortedDates.indexOf(dateKey);
+      const reconsUpToTarget = [];
+      for (let i = 0; i <= targetIdx; i++) {
+        const r = computeDayReconciliation(sortedDates[i]);
+        if (r) reconsUpToTarget.push(r);
+      }
+
       const enrichTank111Lineage = (tankId, seqPrevTank111, seqNextTank111) => {
         const defaultHist = (typeof DEFAULT_TANK_LOT_HISTORY !== 'undefined' && DEFAULT_TANK_LOT_HISTORY[tankId]) || null;
         const priorInfo = (appState.tankLotHistory && appState.tankLotHistory[tankId]) || defaultHist || {
@@ -8376,12 +8773,9 @@
         const minus1Tank111 = seqPrevTank111 || neighbors111.prevTank;
         const plus1Tank111 = seqNextTank111 || neighbors111.nextTank;
 
-        const sortedDates = getSortedDates();
-        const targetIdx = sortedDates.indexOf(dateKey);
         const matchingBatches = [];
-        for (let i = 0; i <= targetIdx; i++) {
-          const dKey = sortedDates[i];
-          const r = computeDayReconciliation(dKey);
+        for (let i = 0; i < reconsUpToTarget.length; i++) {
+          const r = reconsUpToTarget[i];
           (r.blendingPlan.batches || []).forEach((b) => {
             const alloc = b.allocations.find((a) => a.tankId === tankId && a.amount > 0);
             if (alloc) {
@@ -8648,7 +9042,7 @@
                 <div>
                   <div class="text-sm font-semibold text-[#FFE3F2]">ขวดสุราสำเร็จรูป 40°</div>
                   <div class="text-base sm:text-lg font-extrabold text-white mt-0.5 leading-snug">${escHtml(bottleStampCode)} · ${escHtml(bottleTime)} น.</div>
-                  <div class="text-xs sm:text-sm text-[#E4EFE8] mt-1 leading-relaxed">รหัสสายที่ตรงเวลา: <b class="text-[#FF66B8]">${escHtml(activeSource?.lineCode || '0711 / 2610')}</b></div>
+                  <div class="text-xs sm:text-sm text-[#E4EFE8] mt-1 leading-relaxed">รหัสสายที่ตรงเวลา: <b class="text-[#FF66B8]">${escHtml(activeSource?.lineCode || 'ไม่มีรายการส่งบรรจุ')}</b></div>
                 </div>
               </div>
 
@@ -8677,9 +9071,9 @@
                 </div>
                 <div>
                   <div class="text-sm font-semibold text-[#FFE3F2]">ถังเก็บบ่ม 40° อาคาร 111</div>
-                  <div class="text-base sm:text-lg font-extrabold text-white mt-0.5 leading-snug">ถังหลัก: ${escHtml(activeSource?.tankId || '13/111, 14/111')} (~75%)</div>
+                  <div class="text-base sm:text-lg font-extrabold text-white mt-0.5 leading-snug">${activeSource ? `ถังหลัก: ${escHtml(activeSource.tankId)} (~75%)` : 'ไม่มีรายการส่งบรรจุ'}</div>
                   <div class="text-xs sm:text-sm text-[#FFFDF7] mt-1.5 bg-[#10261B]/65 px-2.5 py-1.5 rounded-lg leading-relaxed">
-                    โอกาส ±1 ถัง: <b>${escHtml(activeSource?.lineage?.minus1Tank111 || '12/111')}</b> (-1) หรือ <b>${escHtml(activeSource?.lineage?.plus1Tank111 || '14/111')}</b> (+1)
+                    โอกาส ±1 ถัง: <b>${escHtml(activeSource?.lineage?.minus1Tank111 || '-')}</b> (-1) หรือ <b>${escHtml(activeSource?.lineage?.plus1Tank111 || '-')}</b> (+1)
                   </div>
                 </div>
               </div>
@@ -8694,7 +9088,7 @@
                 </div>
                 <div>
                   <div class="text-sm font-semibold text-[#EFE6D1]">ถังปรุง H01 & H02 (คู่โอน)</div>
-                  <div class="text-base sm:text-lg font-extrabold text-white mt-0.5 leading-snug">${escHtml(activeSource?.lineage?.priorInfo?.batchRange || 'ถังปรุง 48–58')}</div>
+                  <div class="text-base sm:text-lg font-extrabold text-white mt-0.5 leading-snug">${escHtml(activeSource?.lineage?.priorInfo?.batchRange || '-')}</div>
                   <div class="text-xs sm:text-sm text-[#E4EFE8] mt-1 leading-relaxed">ครบ 2 ถัง (H01+H02) โอนเข้าถังบ่ม 1 ถัง พร้อมเลข MatDoc</div>
                 </div>
               </div>
@@ -8709,9 +9103,9 @@
                 </div>
                 <div>
                   <div class="text-sm font-semibold text-[#DCF5EB]">ถังดีกรีสูง 70° อ.110 & โรงบ่ม</div>
-                  <div class="text-base sm:text-lg font-extrabold text-white mt-0.5 leading-snug">${escHtml(activeSource?.lineage?.priorInfo?.source70Tanks || '9/110, 10/110')}</div>
+                  <div class="text-base sm:text-lg font-extrabold text-white mt-0.5 leading-snug">${escHtml(activeSource?.lineage?.priorInfo?.source70Tanks || '-')}</div>
                   <div class="text-xs sm:text-sm text-[#FFFDF7] mt-1.5 bg-[#10261B]/65 px-2.5 py-1.5 rounded-lg leading-relaxed">
-                    โอกาส ±1 ถัง 70°: <b>${escHtml((activeSource?.lineage?.approx70Neighbors || ['8/110 (-1)', '11/110 (+1)']).join(', '))}</b>
+                    โอกาส ±1 ถัง 70°: <b>${escHtml(activeSource ? (activeSource.lineage?.approx70Neighbors || []).join(', ') || '-' : '-')}</b>
                   </div>
                 </div>
               </div>
@@ -8726,11 +9120,11 @@
                 </div>
                 <div>
                   <div class="text-sm font-bold text-[#436152]">ต้นทางหอกลั่น D1–D4 (109/1–109/4)</div>
-                  <div class="text-base sm:text-lg font-extrabold text-[#B8166F] mt-0.5 leading-snug">${escHtml(activeMolasses)}</div>
+                  <div class="text-base sm:text-lg font-extrabold text-[#B8166F] mt-0.5 leading-snug">${escHtml(activeSource ? activeMolasses : (traceData.noRecord ? '-' : activeMolasses))}</div>
                   <div class="text-xs sm:text-sm text-[#1B3B2B] mt-1.5 bg-white/80 px-2.5 py-1.5 rounded-lg leading-relaxed font-semibold">
                     ${activeDistRec
           ? `รับกลั่นลง <b>${escHtml(activeDistRec.tankId)}</b> (${fmtNum(activeDistRec.amount)} L · ${escHtml(activeDistRec.displayDate)})`
-          : `ถังโรงบ่มต้นทาง: <b>${escHtml(activeSource?.lineage?.priorInfo?.agingSource70 || '640/3, 640/6')}</b>`}
+          : `ถังโรงบ่มต้นทาง: <b>${escHtml(activeSource?.lineage?.priorInfo?.agingSource70 || '-')}</b>`}
                   </div>
                 </div>
               </div>
@@ -8937,12 +9331,12 @@
     function handleTraceNativeDatePick(ceIsoVal) {
       if (!ceIsoVal) return;
       const beDateKey = ceIsoToBeDate(ceIsoVal);
-      ensureDateRecordExists(beDateKey);
       if (!appState.traceFilter) appState.traceFilter = { date: beDateKey, bottleTime: '14:30', prepLine: 'all', query: '' };
       appState.traceFilter.date = beDateKey;
-      appState.activeDate = beDateKey;
-      saveAppState();
-      populateDateSelectors();
+      if (appState.days[beDateKey]) {
+        appState.activeDate = beDateKey;
+        populateDateSelectors();
+      }
       renderCurrentView();
     }
 
@@ -9054,8 +9448,16 @@
       document.getElementById('lot-hist-sap').value = info.sapOrders || '';
       document.getElementById('lot-hist-70').value = info.source70Tanks || '';
       document.getElementById('lot-hist-aging').value = info.agingSource70 || '';
-      if (document.getElementById('lot-hist-molasses')) {
-        document.getElementById('lot-hist-molasses').value = info.molassesSupplier || 'บมจ. น้ำตาลมิตรผล';
+      const molSel = document.getElementById('lot-hist-molasses');
+      if (molSel) {
+        const molVal = info.molassesSupplier || 'บมจ. น้ำตาลมิตรผล';
+        if (molVal && !Array.from(molSel.options).some((o) => o.value === molVal)) {
+          const opt = document.createElement('option');
+          opt.value = molVal;
+          opt.textContent = molVal;
+          molSel.insertBefore(opt, molSel.firstChild);
+        }
+        molSel.value = molVal;
       }
       document.getElementById('lot-hist-note').value = info.note || '';
     }
@@ -9180,7 +9582,11 @@
       const cur = appState.tankConfigs[tankId] || {};
       if (field === 'workingVol') {
         const wv = parseFloat(val) || 0;
-        if (wv <= 0) return;
+        if (wv <= 0) {
+          showToast('Working Volume ไม่ถูกต้อง', 'กรุณาระบุความจุมากกว่า 0 ลิตร', 'error');
+          renderCurrentView();
+          return;
+        }
         cur.workingVol = wv;
       } else if (field === 'spiritType') {
         cur.spiritType = val;
@@ -9229,6 +9635,15 @@
     // =========================================================================
     // 15. INITIALIZE APPLICATION ON DOM READY
     // =========================================================================
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const um = document.getElementById('user-modal');
+        const tm = document.getElementById('tank-modal');
+        if (um && !um.classList.contains('hidden')) closeUserManagementModal();
+        if (tm && !tm.classList.contains('hidden')) closeTankModal();
+      }
+    });
+
     window.addEventListener('DOMContentLoaded', () => {
       loadAppState();
       LiquidGlassEngine.init();
